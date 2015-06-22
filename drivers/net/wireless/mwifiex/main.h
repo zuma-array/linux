@@ -910,6 +910,7 @@ struct mwifiex_adapter {
 	int survey_idx;
 	bool auto_tdls;
 	u8 mfg_mode;
+	bool drcs_enabled;
 };
 
 void mwifiex_process_tx_queue(struct mwifiex_adapter *adapter);
