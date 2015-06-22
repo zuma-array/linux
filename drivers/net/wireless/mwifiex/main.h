@@ -1440,6 +1440,8 @@ u8 mwifiex_adjust_data_rate(struct mwifiex_private *priv,
 void mwifiex_dump_drv_info(struct mwifiex_adapter *adapter);
 void *mwifiex_alloc_dma_align_buf(int rx_len, gfp_t flags);
 void mwifiex_queue_main_work(struct mwifiex_adapter *adapter);
+void mwifiex_process_multi_chan_event(struct mwifiex_private *priv,
+				      struct sk_buff *event_skb);
 
 #ifdef CONFIG_DEBUG_FS
 void mwifiex_debugfs_init(void);

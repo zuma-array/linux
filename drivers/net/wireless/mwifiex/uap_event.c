@@ -225,6 +225,12 @@ int mwifiex_process_uap_event(struct mwifiex_private *priv)
 		dev_dbg(adapter->dev, "event: Radar detected\n");
 		mwifiex_11h_handle_radar_detected(priv, adapter->event_skb);
 		break;
+
+	case EVENT_MULTI_CHAN_INFO:
+		dev_dbg(adapter->dev, "event: multi-chan info\n");
+		mwifiex_process_multi_chan_event(priv, adapter->event_skb);
+		break;
+
 	default:
 		dev_dbg(adapter->dev, "event: unknown event id: %#x\n",
 			eventcause);
