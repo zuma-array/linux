@@ -106,6 +106,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_STAC9766 if SND_SOC_AC97_BUS
 	select SND_SOC_TAS2552 if I2C
 	select SND_SOC_TAS5086 if I2C
+	select SND_SOC_ES9018 if I2C
 	select SND_SOC_TFA9879 if I2C
 	select SND_SOC_TLV320AIC23_I2C if I2C
 	select SND_SOC_TLV320AIC23_SPI if SPI_MASTER
@@ -625,6 +626,10 @@ config SND_SOC_TAS5086
 
 config SND_SOC_TFA9879
 	tristate "NXP Semiconductors TFA9879 amplifier"
+	depends on I2C
+
+config SND_SOC_ES9018
+	tristate "ESS ES9018K2M audio driver - I2C"
 	depends on I2C
 
 config SND_SOC_TLV320AIC23

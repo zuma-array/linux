@@ -1,0 +1,22 @@
+ESS ES9018K2M DAC Driver
+
+Required properties:
+
+ - compatible:		Should contain "ess,es9018k2m".
+ - reg:			The i2c address.
+
+Optional properties:
+
+ - reset-gpio: 		A GPIO spec to define which pin is connected to the
+			chip's !RESET pin. If specified, the driver will
+			assert a hardware reset at probe time.
+
+Examples:
+
+	i2c_bus {
+		es9018@90 {
+			compatible = "ess,es9018k2m";
+			reg = <0x90>;
+			reset-gpio = <&gpio1 15 0>;
+		};
+	};
