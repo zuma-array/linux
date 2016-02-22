@@ -1,7 +1,7 @@
 /*
  * ES9018K2M ASoC codec driver
  *
- * Copyright (c) StreamUnlimited GmbH 2015
+ * Copyright (c) StreamUnlimited GmbH 2015-2016
  *     Fionn Cleary <fionn.cleary@streamunlimited.com>
  *
  * Based on TAS5086 code from Daniel Mack <zonque@gmail.com> with additions
@@ -47,6 +47,7 @@
 /* ES9018 registers */
 #define ES9018_SOFT_VOL3	6
 #define ES9018_GENERAL		7
+#define ES9018_DPLL_BW		12
 #define ES9018_VOL1_LEFT 	15
 #define ES9018_VOL2_RIGHT	16
 #define ES9018_CHIP_STATUS	64
@@ -88,12 +89,24 @@ static SOC_ENUM_SINGLE_DECL(es9018_dsd_rolloff_filter,
 			    ES9018_GENERAL, 2,
 			    es9018_dsd_rolloff_filter_txt);
 
+static const char * const es9018_dpll_bw_txt[] = {
+	"normal", "wide"
+};
+static const unsigned int es9018_dpll_bw_values[] = {
+	0x5, 0xF
+};
+static SOC_VALUE_ENUM_SINGLE_DECL(es9018_dpll_bw_i2s,
+				  ES9018_DPLL_BW, 4, 0xF,
+				  es9018_dpll_bw_txt,
+				  es9018_dpll_bw_values);
+
 static const struct snd_kcontrol_new es9018_controls[] = {
 	SOC_DOUBLE_R("Master Playback Volume", ES9018_VOL1_LEFT,
 		     ES9018_VOL2_RIGHT, 0, 0xff, 1),
 	SOC_DOUBLE("Master Playback Switch", ES9018_GENERAL, 0, 1, 1, 1),
 	SOC_ENUM("PCM Rolloff filter", es9018_pcm_rolloff_filter),
 	SOC_ENUM("DSD Rolloff filter", es9018_dsd_rolloff_filter),
+	SOC_ENUM("DPLL I2S Bandwidth", es9018_dpll_bw_i2s),
 };
 
 static const struct snd_soc_dai_ops es9018_dai_ops = {
@@ -149,12 +162,14 @@ MODULE_DEVICE_TABLE(i2c, es9018_i2c_id);
 static const struct regmap_range es9018_read_registers_range[] = {
 	regmap_reg_range(ES9018_SOFT_VOL3, ES9018_GENERAL),
 	regmap_reg_range(ES9018_VOL1_LEFT, ES9018_VOL2_RIGHT),
+	regmap_reg_range(ES9018_DPLL_BW, ES9018_DPLL_BW),
 	regmap_reg_range(ES9018_CHIP_STATUS, ES9018_CHIP_STATUS),
 };
 
 static const struct regmap_range es9018_write_registers_range[] = {
 	regmap_reg_range(ES9018_SOFT_VOL3, ES9018_GENERAL),
 	regmap_reg_range(ES9018_VOL1_LEFT, ES9018_VOL2_RIGHT),
+	regmap_reg_range(ES9018_DPLL_BW, ES9018_DPLL_BW),
 };
 
 static const struct reg_default es9018_reg_defaults[] = {
@@ -162,6 +177,7 @@ static const struct reg_default es9018_reg_defaults[] = {
 	{ ES9018_GENERAL	, 0x80 },
 	{ ES9018_VOL1_LEFT	, 0x00 },
 	{ ES9018_VOL2_RIGHT	, 0x00 },
+	{ ES9018_DPLL_BW	, 0x5A },
 };
 
 static const struct regmap_access_table es9018_read_registers = {
