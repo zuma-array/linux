@@ -47,6 +47,7 @@
 /* ES9018 registers */
 #define ES9018_SOFT_VOL3	6
 #define ES9018_GENERAL		7
+#define ES9018_CHANNELMAP	11
 #define ES9018_DPLL_BW		12
 #define ES9018_VOL1_LEFT 	15
 #define ES9018_VOL2_RIGHT	16
@@ -89,6 +90,13 @@ static SOC_ENUM_SINGLE_DECL(es9018_dsd_rolloff_filter,
 			    ES9018_GENERAL, 2,
 			    es9018_dsd_rolloff_filter_txt);
 
+static const char * const es9018_analog_polarity_txt[] = {
+	"normal", "inverted"
+};
+static SOC_ENUM_DOUBLE_DECL(es9018_analog_polarity,
+			    ES9018_CHANNELMAP, 2, 3,
+			    es9018_analog_polarity_txt);
+
 static const char * const es9018_dpll_bw_txt[] = {
 	"normal", "wide"
 };
@@ -107,6 +115,7 @@ static const struct snd_kcontrol_new es9018_controls[] = {
 	SOC_ENUM("PCM Rolloff filter", es9018_pcm_rolloff_filter),
 	SOC_ENUM("DSD Rolloff filter", es9018_dsd_rolloff_filter),
 	SOC_ENUM("DPLL I2S Bandwidth", es9018_dpll_bw_i2s),
+	SOC_ENUM("Audio Polarity", es9018_analog_polarity),
 };
 
 static const struct snd_soc_dai_ops es9018_dai_ops = {
@@ -162,19 +171,20 @@ MODULE_DEVICE_TABLE(i2c, es9018_i2c_id);
 static const struct regmap_range es9018_read_registers_range[] = {
 	regmap_reg_range(ES9018_SOFT_VOL3, ES9018_GENERAL),
 	regmap_reg_range(ES9018_VOL1_LEFT, ES9018_VOL2_RIGHT),
-	regmap_reg_range(ES9018_DPLL_BW, ES9018_DPLL_BW),
+	regmap_reg_range(ES9018_CHANNELMAP, ES9018_DPLL_BW),
 	regmap_reg_range(ES9018_CHIP_STATUS, ES9018_CHIP_STATUS),
 };
 
 static const struct regmap_range es9018_write_registers_range[] = {
 	regmap_reg_range(ES9018_SOFT_VOL3, ES9018_GENERAL),
 	regmap_reg_range(ES9018_VOL1_LEFT, ES9018_VOL2_RIGHT),
-	regmap_reg_range(ES9018_DPLL_BW, ES9018_DPLL_BW),
+	regmap_reg_range(ES9018_CHANNELMAP, ES9018_DPLL_BW),
 };
 
 static const struct reg_default es9018_reg_defaults[] = {
 	{ ES9018_SOFT_VOL3	, 0x4A },
 	{ ES9018_GENERAL	, 0x80 },
+	{ ES9018_CHANNELMAP	, 0x02 },
 	{ ES9018_VOL1_LEFT	, 0x00 },
 	{ ES9018_VOL2_RIGHT	, 0x00 },
 	{ ES9018_DPLL_BW	, 0x5A },
