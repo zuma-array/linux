@@ -101,10 +101,10 @@ static const char * const es9018_dpll_bw_txt[] = {
 	"normal", "wide"
 };
 static const unsigned int es9018_dpll_bw_values[] = {
-	0x5, 0xF
+	0x5C, 0xFC
 };
 static SOC_VALUE_ENUM_SINGLE_DECL(es9018_dpll_bw_i2s,
-				  ES9018_DPLL_BW, 4, 0xF,
+				  ES9018_DPLL_BW, 0, 0xFF,
 				  es9018_dpll_bw_txt,
 				  es9018_dpll_bw_values);
 
@@ -187,7 +187,7 @@ static const struct reg_default es9018_reg_defaults[] = {
 	{ ES9018_CHANNELMAP	, 0x02 },
 	{ ES9018_VOL1_LEFT	, 0x00 },
 	{ ES9018_VOL2_RIGHT	, 0x00 },
-	{ ES9018_DPLL_BW	, 0x5A },
+	{ ES9018_DPLL_BW	, 0x5C },
 };
 
 static const struct regmap_access_table es9018_read_registers = {
