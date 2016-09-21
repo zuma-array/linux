@@ -291,6 +291,23 @@ struct bufdesc *fec_enet_get_prevdesc(struct bufdesc *bdp,
 		return (new_bd < base) ? (new_bd + ring_size) : new_bd;
 }
 
+static void fec_set_reset(struct net_device *ndev, bool set)
+{
+	struct fec_enet_private *fep = netdev_priv(ndev);
+
+	if (!gpio_is_valid(fep->phy_reset_gpio))
+		return;
+
+	if (set) {
+		gpio_set_value(fep->phy_reset_gpio, 0);
+		msleep(fep->phy_reset_msec);
+	} else {
+		msleep(fep->phy_reset_msec);
+		gpio_set_value(fep->phy_reset_gpio, 1);
+	}
+
+}
+
 static int fec_enet_get_bd_index(struct bufdesc *base, struct bufdesc *bdp,
 				struct fec_enet_private *fep)
 {
@@ -1899,7 +1916,9 @@ static int fec_enet_clk_enable(struct net_device *ndev, bool enable)
 			if (ret)
 				goto failed_clk_ref;
 		}
+		fec_set_reset(ndev, false);
 	} else {
+		fec_set_reset(ndev, true);
 		clk_disable_unprepare(fep->clk_ahb);
 		clk_disable_unprepare(fep->clk_ipg);
 		if (fep->clk_enet_out)
@@ -1912,6 +1931,7 @@ static int fec_enet_clk_enable(struct net_device *ndev, bool enable)
 		}
 		if (fep->clk_ref)
 			clk_disable_unprepare(fep->clk_ref);
+
 	}
 
 	return 0;
@@ -2071,6 +2091,7 @@ static int fec_enet_mii_init(struct platform_device *pdev)
 		err = -EINVAL;
 		goto err_out;
 	}
+
 
 	/*
 	 * The i.MX28 and i.MX6 types have another filed in the MSCR (aka
@@ -3329,30 +3350,33 @@ static int fec_enet_init(struct net_device *ndev)
 #ifdef CONFIG_OF
 static void fec_reset_phy(struct platform_device *pdev)
 {
-	int err, phy_reset;
-	int msec = 1;
+	int err;
+	struct net_device *ndev = platform_get_drvdata(pdev);
+	struct fec_enet_private *fep;
 	struct device_node *np = pdev->dev.of_node;
+
+	fep = netdev_priv(ndev);
 
 	if (!np)
 		return;
 
-	err = of_property_read_u32(np, "phy-reset-duration", &msec);
+	err = of_property_read_u32(np, "phy-reset-duration", &fep->phy_reset_msec);
 	/* A sane reset duration should not be longer than 1s */
-	if (!err && msec > 1000)
-		msec = 1;
+	if (!err && fep->phy_reset_msec > 1000)
+		fep->phy_reset_msec = 1;
 
-	phy_reset = of_get_named_gpio(np, "phy-reset-gpios", 0);
-	if (!gpio_is_valid(phy_reset))
+	fep->phy_reset_gpio = of_get_named_gpio(np, "phy-reset-gpios", 0);
+	if (!gpio_is_valid(fep->phy_reset_gpio))
 		return;
 
-	err = devm_gpio_request_one(&pdev->dev, phy_reset,
+	err = devm_gpio_request_one(&pdev->dev, fep->phy_reset_gpio,
 				    GPIOF_OUT_INIT_LOW, "phy-reset");
 	if (err) {
 		dev_err(&pdev->dev, "failed to get phy-reset-gpios: %d\n", err);
 		return;
 	}
-	msleep(msec);
-	gpio_set_value(phy_reset, 1);
+	msleep(fep->phy_reset_msec);
+	gpio_set_value(fep->phy_reset_gpio, 1);
 }
 #else /* CONFIG_OF */
 static void fec_reset_phy(struct platform_device *pdev)
@@ -3571,6 +3595,8 @@ fec_probe(struct platform_device *pdev)
 		fep->reg_phy = NULL;
 	}
 
+	fep->phy_reset_msec = 1;
+	fep->phy_reset_gpio = -1;
 	fec_reset_phy(pdev);
 
 	if (fep->bufdesc_ex)
