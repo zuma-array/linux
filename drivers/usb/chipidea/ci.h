@@ -263,6 +263,7 @@ struct ci_hdrc {
 	bool				supports_runtime_pm;
 	bool				in_lpm;
 	bool				wakeup_int;
+	bool				vbus_overcurrent;
 	enum ci_revision		rev;
 	/* register save area for suspend&resume */
 	u32				pm_command;
@@ -278,6 +279,7 @@ struct ci_hdrc {
 	struct work_struct		power_lost_work;
 	struct workqueue_struct		*power_lost_wq;
 	struct mutex			mutex;
+	struct delayed_work		check_vbus_work;
 };
 
 static inline struct ci_role_driver *ci_role(struct ci_hdrc *ci)
