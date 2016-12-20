@@ -1294,6 +1294,13 @@ static int usb_suspend_both(struct usb_device *udev, pm_message_t msg)
 	int			i = 0, n = 0;
 	struct usb_interface	*intf;
 
+#ifdef CONFIG_AMLOGIC_USB
+	struct usb_hcd	*hcd = container_of(udev->bus, struct usb_hcd, self);
+
+	if (PMSG_IS_SUSPEND(msg))
+		hcd->flags |= (1 << 29);
+#endif
+
 	if (udev->state == USB_STATE_NOTATTACHED ||
 			udev->state == USB_STATE_SUSPENDED)
 		goto done;
@@ -1394,6 +1401,13 @@ static int usb_resume_both(struct usb_device *udev, pm_message_t msg)
 	int			status = 0;
 	int			i;
 	struct usb_interface	*intf;
+
+#ifdef CONFIG_AMLOGIC_USB
+	struct usb_hcd	*hcd = container_of(udev->bus, struct usb_hcd, self);
+
+	if (PMSG_IS_SUSPEND(msg))
+		hcd->flags &= (~(1<<29));
+#endif
 
 	if (udev->state == USB_STATE_NOTATTACHED) {
 		status = -ENODEV;
