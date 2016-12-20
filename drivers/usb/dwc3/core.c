@@ -41,6 +41,10 @@
 #include <linux/usb/of.h>
 #include <linux/usb/otg.h>
 
+#ifdef CONFIG_AMLOGIC_USB
+#include <linux/amlogic/usbtype.h>
+#endif
+
 #include "core.h"
 #include "gadget.h"
 #include "io.h"
@@ -206,6 +210,7 @@ u32 dwc3_core_fifo_space(struct dwc3_ep *dep, u8 type)
 	return DWC3_GDBGFIFOSPACE_SPACE_AVAILABLE(reg);
 }
 
+#ifndef CONFIG_AMLOGIC_USB
 /**
  * dwc3_core_soft_reset - Issues core soft reset and PHY reset
  * @dwc: pointer to our context structure
@@ -264,6 +269,92 @@ done:
 
 	return 0;
 }
+#else
+/**
+ * dwc3_core_soft_reset - Issues core soft reset and PHY reset
+ * @dwc: pointer to our context structure
+ */
+static int dwc3_core_soft_reset(struct dwc3 *dwc)
+{
+	u32		reg;
+	int		ret;
+
+	/* Before Resetting PHY, put Core in Reset */
+	reg = dwc3_readl(dwc->regs, DWC3_GCTL);
+	reg |= DWC3_GCTL_CORESOFTRESET;
+	dwc3_writel(dwc->regs, DWC3_GCTL, reg);
+
+	/* Assert USB3 PHY reset */
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(0));
+	reg |= DWC3_GUSB3PIPECTL_PHYSOFTRST;
+	dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(0), reg);
+
+	/* Assert USB2 PHY reset */
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(0));
+	reg |= DWC3_GUSB2PHYCFG_PHYSOFTRST;
+	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
+
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(1));
+	reg |= DWC3_GUSB2PHYCFG_PHYSOFTRST;
+	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(1), reg);
+
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(2));
+	reg |= DWC3_GUSB2PHYCFG_PHYSOFTRST;
+	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(2), reg);
+
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(3));
+	reg |= DWC3_GUSB2PHYCFG_PHYSOFTRST;
+	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(3), reg);
+
+	usb_phy_init(dwc->usb2_phy);
+	usb_phy_init(dwc->usb3_phy);
+	ret = phy_init(dwc->usb2_generic_phy);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_init(dwc->usb3_generic_phy);
+	if (ret < 0) {
+		phy_exit(dwc->usb2_generic_phy);
+		return ret;
+	}
+	mdelay(100);
+
+	/* Clear USB3 PHY reset */
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(0));
+	reg &= ~DWC3_GUSB3PIPECTL_PHYSOFTRST;
+	dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(0), reg);
+
+	/* Clear USB2 PHY reset */
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(0));
+	reg &= ~DWC3_GUSB2PHYCFG_PHYSOFTRST;
+	reg &= ~DWC3_GUSB2PHYCFG_SUSPHY;
+	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
+
+	/* Clear USB2 PHY reset */
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(1));
+	reg &= ~DWC3_GUSB2PHYCFG_PHYSOFTRST;
+	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(1), reg);
+
+	/* Clear USB2 PHY reset */
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(2));
+	reg &= ~DWC3_GUSB2PHYCFG_PHYSOFTRST;
+	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(2), reg);
+
+	/* Clear USB2 PHY reset */
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(3));
+	reg &= ~DWC3_GUSB2PHYCFG_PHYSOFTRST;
+	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(3), reg);
+
+	mdelay(100);
+
+	/* After PHYs are stable we can take Core out of reset state */
+	reg = dwc3_readl(dwc->regs, DWC3_GCTL);
+	reg &= ~DWC3_GCTL_CORESOFTRESET;
+	dwc3_writel(dwc->regs, DWC3_GCTL, reg);
+
+	return 0;
+}
+#endif
 
 /*
  * dwc3_frame_length_adjustment - Adjusts frame length if required
@@ -536,6 +627,7 @@ static int dwc3_core_ulpi_init(struct dwc3 *dwc)
  */
 static int dwc3_phy_setup(struct dwc3 *dwc)
 {
+#ifndef CONFIG_AMLOGIC_USB
 	u32 reg;
 
 	reg = dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(0));
@@ -648,7 +740,7 @@ static int dwc3_phy_setup(struct dwc3 *dwc)
 		reg &= ~DWC3_GUSB2PHYCFG_U2_FREECLK_EXISTS;
 
 	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
-
+#endif
 	return 0;
 }
 
@@ -693,8 +785,17 @@ static void dwc3_core_setup_global_control(struct dwc3 *dwc)
 	u32 hwparams4 = dwc->hwparams.hwparams4;
 	u32 reg;
 
+#ifdef CONFIG_AMLOGIC_USB
+	reg = dwc3_readl(dwc->regs, DWC3_GUCTL);
+	reg |= DWC3_GUCTL_USBHSTINAUTORETRYEN;
+	dwc3_writel(dwc->regs, DWC3_GUCTL, reg);
+#endif
+
 	reg = dwc3_readl(dwc->regs, DWC3_GCTL);
 	reg &= ~DWC3_GCTL_SCALEDOWN_MASK;
+#ifdef CONFIG_AMLOGIC_USB
+	reg &= ~DWC3_GCTL_DISSCRAMBLE;
+#endif
 
 	switch (DWC3_GHWPARAMS1_EN_PWROPT(dwc->hwparams.hwparams1)) {
 	case DWC3_GHWPARAMS1_EN_PWROPT_CLK:
@@ -1534,6 +1635,14 @@ static const struct of_device_id of_dwc3_match[] = {
 	{
 		.compatible = "synopsys,dwc3"
 	},
+#ifdef CONFIG_AMLOGIC_USB
+	{
+		.compatible = "snps, dwc3"
+	},
+	{
+		.compatible = "synopsys, dwc3"
+	},
+#endif
 	{ },
 };
 MODULE_DEVICE_TABLE(of, of_dwc3_match);
