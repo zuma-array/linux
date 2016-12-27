@@ -1334,6 +1334,9 @@ static int ci_hdrc_probe(struct platform_device *pdev)
 	INIT_WORK(&ci->power_lost_work, ci_power_lost_work);
 	mutex_init(&ci->mutex);
 
+	/* Set the VBUS-valid threshold voltage to 4.75V - 6% = 4.465V */
+	hw_write_id_reg(ci, 0x230, (7 << 10), (0 << 10));
+
 	/* Init workqueue for checking VBUS overcurrent & start it. */
 	ci->vbus_overcurrent = false;
 	INIT_DELAYED_WORK(&ci->check_vbus_work,
