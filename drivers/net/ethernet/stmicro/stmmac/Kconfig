@@ -77,8 +77,8 @@ config DWMAC_LPC18XX
 
 config DWMAC_MESON
 	tristate "Amlogic Meson dwmac support"
-	default ARCH_MESON
-	depends on OF && COMMON_CLK && (ARCH_MESON || COMPILE_TEST)
+	default n
+	depends on OF && COMMON_CLK
 	help
 	  Support for Ethernet controller on Amlogic Meson SoCs.
 
@@ -96,6 +96,17 @@ config DWMAC_OXNAS
 
 	  This selects the Oxford Semiconductor OXNASSoC glue layer support for
 	  the stmmac device driver. This driver is used for OX820.
+
+config AMLOGIC_ETH_PRIVE
+	tristate "Amlogic private ethernet code"
+	default n
+	depends on OF
+	help
+	  Support for Ethernet controller on Amlogic Meson SoCs.
+
+	  This selects the Amlogic Meson SoC glue layer support for
+	  the stmmac device driver. This driver is used for amlogic
+	  private driver.
 
 config DWMAC_ROCKCHIP
 	tristate "Rockchip dwmac support"
