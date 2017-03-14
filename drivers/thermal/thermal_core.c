@@ -227,6 +227,33 @@ exit:
 	return ret;
 }
 
+#ifdef CONFIG_AMLOGIC_TEMP_SENSOR
+void thermal_set_upper(struct thermal_zone_device *tz,
+		       struct thermal_cooling_device *cdev,
+		       int trip, unsigned long upper)
+{
+	struct thermal_instance *ins;
+
+	ins = get_thermal_instance(tz, cdev, trip);
+	if (ins != NULL)
+		ins->upper = upper;
+}
+EXPORT_SYMBOL(thermal_set_upper);
+
+unsigned long thermal_get_upper(struct thermal_zone_device *tz,
+				struct thermal_cooling_device *cdev, int trip)
+{
+	struct thermal_instance *ins;
+
+	ins = get_thermal_instance(tz, cdev, trip);
+	if (ins != NULL)
+		return ins->upper;
+
+	return (-1UL);
+}
+EXPORT_SYMBOL(thermal_get_upper);
+#endif
+
 int thermal_build_list_of_policies(char *buf)
 {
 	struct thermal_governor *pos;
@@ -371,11 +398,64 @@ static void thermal_emergency_poweroff(void)
 			      msecs_to_jiffies(poweroff_delay_ms));
 }
 
+#ifdef CONFIG_AMLOGIC_TEMP_SENSOR
+static bool can_notify(struct thermal_zone_device *tz,
+		       int trip, enum thermal_trip_type trip_type,
+		       long trip_temp)
+{
+	unsigned int hyst = 0;
+
+	if (trip_type != THERMAL_TRIP_HOT)
+		return false;
+	tz->ops->get_trip_hyst(tz, trip, &hyst);
+
+	if (tz->temperature < 0)
+		return false;
+
+	/* increase each hyst step */
+	if (tz->temperature >= (trip_temp + tz->hot_step * hyst)) {
+		tz->hot_step++;
+		dev_info(&tz->device,
+			 "temp:%d increase, hyst:%d, trip_temp:%ld, hot:%x\n",
+			 tz->temperature, hyst, trip_temp, tz->hot_step);
+		return true;
+	}
+	/* reserve a step gap */
+	if (tz->temperature <= (trip_temp + (tz->hot_step - 2) * hyst) &&
+	    tz->hot_step) {
+		tz->hot_step--;
+		dev_info(&tz->device,
+			 "temp:%d decrease, hyst:%d, trip_temp:%ld, hot:%x\n",
+			 tz->temperature, hyst, trip_temp, tz->hot_step);
+		return true;
+	}
+	return false;
+}
+#endif
+
 static void handle_critical_trips(struct thermal_zone_device *tz,
 				  int trip, enum thermal_trip_type trip_type)
 {
 	int trip_temp;
 
+#ifdef CONFIG_AMLOGIC_TEMP_SENSOR
+	tz->ops->get_trip_temp(tz, trip, &trip_temp);
+
+	trace_thermal_zone_trip(tz, trip, trip_type);
+
+	if (can_notify(tz, trip, trip_type, trip_temp)) {
+		if (tz->ops->notify)
+			tz->ops->notify(tz, trip, trip_type);
+	}
+
+	if ((trip_type == THERMAL_TRIP_CRITICAL) &&
+	    (tz->temperature >= trip_temp)) {
+		dev_emerg(&tz->device,
+			  "critical temperature reached(%d C),shutting down\n",
+			  tz->temperature / 1000);
+		orderly_poweroff(true);
+	}
+#else
 	tz->ops->get_trip_temp(tz, trip, &trip_temp);
 
 	/* If we have not crossed the trip_temp, we do not care. */
@@ -403,6 +483,7 @@ static void handle_critical_trips(struct thermal_zone_device *tz,
 		}
 		mutex_unlock(&poweroff_lock);
 	}
+#endif
 }
 
 static void handle_thermal_trip(struct thermal_zone_device *tz, int trip)
@@ -598,6 +679,10 @@ int power_actor_set_power(struct thermal_cooling_device *cdev,
 	if (ret)
 		return ret;
 
+#ifdef CONFIG_AMLOGIC_TEMP_SENSOR
+	if (state > instance->upper)
+		state = instance->upper;
+#endif
 	instance->target = state;
 	mutex_lock(&cdev->lock);
 	cdev->updated = false;
