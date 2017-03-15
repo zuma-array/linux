@@ -13597,6 +13597,10 @@ F: include/linux/amlogic/sd.h
 F: include/linux/mmc/emmc_partitions.h
 F: include/linux/mmc/host.h
 
+AMLOGIC GPU DEVICETREE
+M:	Jiyu Yang <jiyu.yang@amlogic.com>
+F:	arch/arm64/boot/dts/amlogic/mesongxtvbb-gpu-t83x.dtsi
+
 AMLOGIC VRTC DRIVER
 M:	Yun Cai <yun.cai@amlogic.com>
 F:	drivers/amlogic/vrtc/
