@@ -15017,6 +15017,10 @@ AMLOGIC scpi cpufreq
 M:  jianxin.pan <jianxin.pan@amlogic.com>
 F:  drivers/amlogic/clk/clk-scpi.c
 
+AMLOGIC driver for cec
+M: Tao Zeng <tao.zeng@amlogic.com>
+F: drivers/amlogic/cec/*
+
 AMLOGIC driver for i2c
 M: Xuhua Zhang <xuhua.zhang@amlogic.com>
 F: drivers/amlogic/i2c/aml_i2c.c
