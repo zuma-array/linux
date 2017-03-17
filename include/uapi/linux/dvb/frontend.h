@@ -454,6 +454,25 @@ enum fe_interleaving {
 	INTERLEAVING_720,
 };
 
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+struct fe_blind_scan_parameters {
+	/* minimum tuner frequency in kHz */
+	__u32 min_frequency;
+	/* maximum tuner frequency in kHz */
+	__u32 max_frequency;
+	/* minimum symbol rate in sym/sec */
+	__u32 min_symbol_rate;
+	/* maximum symbol rate in sym/sec */
+	__u32 max_symbol_rate;
+	/* search range in kHz. freq -/+freqRange will be searched */
+	__u32 frequency_range;
+	/* tuner step frequency in kHz */
+	__u32 frequency_step;
+	/* blindscan event timeout */
+	__s32 timeout;
+};
+#endif
+
 /* DVBv5 property Commands */
 
 #define DTV_UNDEFINED		0
@@ -546,7 +565,22 @@ enum fe_interleaving {
 #define DTV_STAT_ERROR_BLOCK_COUNT	68
 #define DTV_STAT_TOTAL_BLOCK_COUNT	69
 
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+
+/* Get tne TS input of the frontend */
+#define DTV_TS_INPUT                    70
+/* Blind scan */
+#define DTV_START_BLIND_SCAN            71
+#define DTV_CANCEL_BLIND_SCAN           72
+#define DTV_BLIND_SCAN_STATUS           73
+
+#define DTV_MAX_COMMAND		DTV_BLIND_SCAN_STATUS
+
+#else  /*!defined(CONFIG_AMLOGIC_DVB_COMPAT)*/
+
 #define DTV_MAX_COMMAND		DTV_STAT_TOTAL_BLOCK_COUNT
+
+#endif /*CONFIG_AMLOGIC_DVB_COMPAT*/
 
 /**
  * enum fe_pilot - Type of pilot tone
@@ -868,7 +902,14 @@ struct dtv_property {
  */
 struct dtv_properties {
 	__u32 num;
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+	union {
+		struct dtv_property *props;
+		__u64                reserved;
+	};
+#else
 	struct dtv_property *props;
+#endif
 };
 
 /*
@@ -992,6 +1033,28 @@ struct dvb_frontend_parameters {
 		struct dvb_vsb_parameters vsb;		/* ATSC */
 	} u;
 };
+
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+
+struct dvb_frontend_parameters_ex {
+	__u32 frequency;  /* (absolute) frequency in Hz for DVB-C/DVB-T/ATSC */
+			  /* intermediate frequency in kHz for DVB-S */
+	fe_spectral_inversion_t inversion;
+	union {
+		struct dvb_qpsk_parameters qpsk;	/* DVB-S */
+		struct dvb_qam_parameters  qam;		/* DVB-C */
+		struct dvb_ofdm_parameters ofdm;	/* DVB-T */
+		struct dvb_vsb_parameters vsb;		/* ATSC */
+		/* Add extenstion data here */
+	} u;
+};
+
+static char dvb_check_frontend_parameters_size[
+	(sizeof(struct dvb_frontend_parameters_ex)
+	== sizeof(struct dvb_frontend_parameters)) ? 1 : -1]
+	__attribute__((__unused__));
+
+#endif /*CONFIG_AMLOGIC_DVB_COMPAT*/
 
 struct dvb_frontend_event {
 	fe_status_t status;
