@@ -1016,6 +1016,11 @@ static inline void *nand_get_manufacturer_data(struct nand_chip *chip)
 #define NAND_MFR_ATO		0x9b
 #define NAND_MFR_WINBOND	0xef
 
+/* add extra flash manufacturer ID Codes */
+#ifdef CONFIG_AMLOGIC_NAND
+#define NAND_ID_WINBOND		0xef
+#define NAND_ID_ESMT		0xc8
+#endif
 
 /*
  * A helper for defining older NAND chips where the second ID byte fully
