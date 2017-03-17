@@ -132,6 +132,28 @@ struct ca_descr {
 	unsigned char cw[8];
 };
 
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+
+/* CW type. */
+enum ca_cw_type {
+	CA_CW_DVB_CSA_EVEN,
+	CA_CW_DVB_CSA_ODD,
+	CA_CW_AES_EVEN,
+	CA_CW_AES_ODD,
+	CA_CW_AES_EVEN_IV,
+	CA_CW_AES_ODD_IV
+};
+
+struct ca_descr_ex {
+	unsigned int index;
+	enum ca_cw_type type;
+	int          flags;
+#define CA_CW_FROM_KL 1
+	unsigned char cw[16];
+};
+
+#endif /*CONFIG_AMLOGIC_DVB_COMPAT*/
+
 #define CA_RESET          _IO('o', 128)
 #define CA_GET_CAP        _IOR('o', 129, struct ca_caps)
 #define CA_GET_SLOT_INFO  _IOR('o', 130, struct ca_slot_info)
@@ -151,5 +173,9 @@ typedef struct ca_descr ca_descr_t;
 
 #endif
 
+
+#ifdef CONFIG_AMLOGIC_DVB_COMPAT
+#define CA_SET_DESCR_EX   _IOW('o', 200, struct ca_descr_ex)
+#endif
 
 #endif
