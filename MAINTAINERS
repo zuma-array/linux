@@ -13764,3 +13764,10 @@ F: drivers/amlogic/spicc/spicc.c
 F: drivers/amlogic/spicc/spicc.h
 F: drivers/amlogic/spicc/Kconfig
 F: drivers/amlogic/spicc/Makefile
+
+AMLOGIC BT/WIFI
+M: Rongjun Chen <rongjun.chen@amlogic.com>
+F: drivers/amlogic/bluetooth/
+F: drivers/amlogic/wifi/
+
+
