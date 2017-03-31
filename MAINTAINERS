@@ -13741,6 +13741,10 @@ AMLOGIC WATCHDOG DRIVER SUPPORT
 M: Bo Yang <bo.yang@amlogic.com>
 F: drivers/amlogic/watchdog/*
 
+AMLOGIC LED DRIVER SUPPORT
+M: Bo Yang <bo.yang@amlogic.com>
+F: drivers/amlogic/led/*
+
 AMLOGIC JTAG DRIVER SUPPORT
 M: Bo Yang <bo.yang@amlogic.com>
 F: drivers/amlogic/jtag/*
