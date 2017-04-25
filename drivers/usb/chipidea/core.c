@@ -821,6 +821,11 @@ static int ci_get_platdata(struct device *dev,
 			platdata->pins_device = p;
 	}
 
+	platdata->vbus_oc_protection_disabled = of_property_read_bool(dev->of_node, "disable-vbus-oc-protection");
+	if (platdata->vbus_oc_protection_disabled) {
+		dev_info(dev, "VBUS OC protetcion is disabled\n");
+	}
+
 	return 0;
 }
 
@@ -1343,18 +1348,20 @@ static int ci_hdrc_probe(struct platform_device *pdev)
 	hw_write_id_reg(ci, 0x230, (7 << 10), (0 << 10));
 
 	/* Init workqueue for checking VBUS overcurrent & start it. */
-	ci->vbus_oc_wq = create_freezable_workqueue("ci_vbus_oc");
-	if (!ci->vbus_oc_wq) {
-		dev_err(ci->dev, "can't create vbus_oc workqueue\n");
-		goto destroy_power_lost_wq;
-	}
 	ci->vbus_overcurrent = false;
-	INIT_DELAYED_WORK(&ci->check_vbus_work,
-			  imx8_check_vbus_overcurrent);
-	queue_delayed_work(
-		ci->vbus_oc_wq,
-		&ci->check_vbus_work,
-		msecs_to_jiffies(1000));
+	if (!ci->platdata->vbus_oc_protection_disabled) {
+		ci->vbus_oc_wq = create_freezable_workqueue("ci_vbus_oc");
+		if (!ci->vbus_oc_wq) {
+			dev_err(ci->dev, "can't create vbus_oc workqueue\n");
+			goto destroy_power_lost_wq;
+		}
+		INIT_DELAYED_WORK(&ci->check_vbus_work,
+				imx8_check_vbus_overcurrent);
+		queue_delayed_work(
+			ci->vbus_oc_wq,
+			&ci->check_vbus_work,
+			msecs_to_jiffies(1000));
+	}
 	return 0;
 
 destroy_power_lost_wq:
@@ -1395,8 +1402,10 @@ static int ci_hdrc_remove(struct platform_device *pdev)
 
 	flush_workqueue(ci->power_lost_wq);
 	destroy_workqueue(ci->power_lost_wq);
-	flush_workqueue(ci->vbus_oc_wq);
-	destroy_workqueue(ci->vbus_oc_wq);
+	if (!ci->platdata->vbus_oc_protection_disabled) {
+		flush_workqueue(ci->vbus_oc_wq);
+		destroy_workqueue(ci->vbus_oc_wq);
+	}
 	dbg_remove_files(ci);
 	ci_role_destroy(ci);
 	ci_hdrc_enter_lpm(ci, true);
@@ -1499,10 +1508,11 @@ static int ci_controller_resume(struct device *dev)
 		ci_extcon_wakeup_int(ci);
 	}
 
-	queue_delayed_work(
-		ci->vbus_oc_wq,
-		&ci->check_vbus_work,
-		msecs_to_jiffies(0));
+	if (!ci->platdata->vbus_oc_protection_disabled)
+		queue_delayed_work(
+			ci->vbus_oc_wq,
+			&ci->check_vbus_work,
+			msecs_to_jiffies(0));
 
 	return 0;
 }
@@ -1513,7 +1523,8 @@ static int ci_suspend(struct device *dev)
 	struct ci_hdrc *ci = dev_get_drvdata(dev);
 
 	flush_workqueue(ci->power_lost_wq);
-	flush_workqueue(ci->vbus_oc_wq);
+	if (!ci->platdata->vbus_oc_protection_disabled)
+		flush_workqueue(ci->vbus_oc_wq);
 	if (ci->wq)
 		flush_workqueue(ci->wq);
 	/*
@@ -1602,7 +1613,8 @@ static int ci_runtime_suspend(struct device *dev)
 	if(ci->vbus_overcurrent)
 		return -EBUSY;
 
-	cancel_delayed_work_sync(&ci->check_vbus_work); 
+	if (!ci->platdata->vbus_oc_protection_disabled)
+		cancel_delayed_work_sync(&ci->check_vbus_work); 
 
 	if (ci->in_lpm)
 		return 0;

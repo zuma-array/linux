@@ -91,6 +91,7 @@ struct ci_hdrc_platform_data {
 	struct pinctrl_state *pins_default;
 	struct pinctrl_state *pins_host;
 	struct pinctrl_state *pins_device;
+	bool 			vbus_oc_protection_disabled;
 };
 
 /* Default offset of capability registers */
