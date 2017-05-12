@@ -37,4 +37,8 @@ extern struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align,
 extern bool cma_release(struct cma *cma, const struct page *pages, unsigned int count);
 
 extern int cma_for_each_area(int (*it)(struct cma *cma, void *data), void *data);
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+extern bool cma_suitable(gfp_t gfp_mask);
+#endif	/* CONFIG_AMLOGIC_MODIFY */
 #endif

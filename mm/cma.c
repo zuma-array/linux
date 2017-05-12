@@ -536,3 +536,14 @@ int cma_for_each_area(int (*it)(struct cma *cma, void *data), void *data)
 
 	return 0;
 }
+
+#ifdef CONFIG_AMLOGIC_MODIFY
+bool cma_suitable(gfp_t gfp_mask)
+{
+	if (gfp_mask & (__GFP_RECLAIMABLE | __GFP_BDEV | __GFP_WRITE))
+		return false;
+	if (!(gfp_mask & __GFP_MOVABLE))
+		return false;
+	return true;
+}
+#endif /* CONFIG_AMLOGIC_MODIFY */
