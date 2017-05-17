@@ -2283,6 +2283,75 @@ static int gpmi_init_last(struct gpmi_nand_data *this)
 	return 0;
 }
 
+static int of_read_timing(struct device_node *np, const char *name, int8_t *timing)
+{
+	int ret;
+	u32 val;
+
+	ret = of_property_read_u32(np, name, &val);
+
+	*timing = val;
+
+	return ret;
+}
+
+
+static int of_get_timings(struct gpmi_nand_data *this)
+{
+	struct device_node *np = this->dev->of_node;
+	struct device_node *timings_np = NULL;
+	struct nand_timing new_timings = { 0 };
+	int ret = 0;
+
+	timings_np = of_get_child_by_name(np, "timings");
+	if (!timings_np) {
+		dev_warn(this->dev, "timings node not found\n");
+		return -ENODEV;
+	}
+
+	/* This 3 timings are always mandatory */
+	ret |= of_read_timing(timings_np, "data-setup-ns", &new_timings.data_setup_in_ns);
+	ret |= of_read_timing(timings_np, "data-hold-ns", &new_timings.data_hold_in_ns);
+	ret |= of_read_timing(timings_np, "address-setup-ns", &new_timings.address_setup_in_ns);
+	if (ret) {
+		dev_warn(this->dev, "data-setup-ns, data-hold-ns or address-setup-ns missing\n");
+		of_node_put(timings_np);
+		return -EINVAL;
+	}
+
+	/* Either trea-ns, trloh-ns and trhoh-ns need to be specified or sample-delay-ns */
+	ret |= of_read_timing(timings_np, "trea-ns", &new_timings.tREA_in_ns);
+	ret |= of_read_timing(timings_np, "trloh-ns", &new_timings.tRLOH_in_ns);
+	ret |= of_read_timing(timings_np, "trhoh-ns", &new_timings.tRHOH_in_ns);
+
+	/* At least one of the above timings is missing, try using the sample-delay-ns setting */
+	if (ret) {
+		dev_info(this->dev, "trea-ns, trloh-ns and/or trhoh-ns missing, will be trying sample-delay-ns instead\n");
+
+		if(of_read_timing(timings_np, "sample-delay-ns", &new_timings.gpmi_sample_delay_in_ns)) {
+			dev_warn(this->dev, "sample-delay-ns missing\n");
+			of_node_put(timings_np);
+			return -EINVAL;
+		}
+
+		/* If we successfully read the sample-delay-ns timing we need to reset the other ones */
+		new_timings.tREA_in_ns = -1;
+		new_timings.tRLOH_in_ns = -1;
+		new_timings.tRHOH_in_ns = -1;
+	} else {
+		/*
+		 * All the tr*-ns timings were specified, just for completness sake set the
+		 * gpmi_sample_delay_in_ns explicitly to -1
+		 */
+		new_timings.gpmi_sample_delay_in_ns = -1;
+	}
+
+	this->timing = new_timings;
+
+	of_node_put(timings_np);
+	return 0;
+}
+
 static int gpmi_nand_init(struct gpmi_nand_data *this)
 {
 	struct nand_chip *chip = &this->nand;
@@ -2311,6 +2380,15 @@ static int gpmi_nand_init(struct gpmi_nand_data *this)
 
 	/* Set up swap_block_mark, must be set before the gpmi_set_geometry() */
 	this->swap_block_mark = !GPMI_IS_MX23(this);
+
+	ret = of_get_timings(this);
+	if (ret)
+		dev_warn(this->dev, "could not get timings from device-tree, will use safe defaults\n");
+
+	dev_dbg(this->dev, "timings: %d %d %d %d %d %d %d\n", this->timing.data_setup_in_ns, this->timing.data_hold_in_ns,
+								this->timing.address_setup_in_ns, this->timing.gpmi_sample_delay_in_ns,
+								this->timing.tREA_in_ns, this->timing.tRLOH_in_ns, this->timing.tRHOH_in_ns);
+
 
 	/*
 	 * Allocate a temporary DMA buffer for reading ID in the
