@@ -106,7 +106,7 @@ int update_lpddr2_freq(int ddr_rate)
 	if (ddr_rate == curr_ddr_rate)
 		return 0;
 
-	printk(KERN_DEBUG "\nBus freq set to %d start...\n", ddr_rate);
+	printk(KERN_DEBUG "\nLPDDR2 freq set to %d start...\n", ddr_rate);
 
 	spin_lock_irqsave(&freq_lock, flags);
 	/*
@@ -123,7 +123,7 @@ int update_lpddr2_freq(int ddr_rate)
 	curr_ddr_rate = ddr_rate;
 	spin_unlock_irqrestore(&freq_lock, flags);
 
-	printk(KERN_DEBUG "\nBus freq set to %d done...\n", ddr_rate);
+	printk(KERN_DEBUG "\nLPDDR2 freq set to %d done...\n", ddr_rate);
 
 	return 0;
 }
@@ -162,7 +162,7 @@ int update_lpddr2_freq_smp(int ddr_rate)
 	if (ddr_rate == curr_ddr_rate)
 		return 0;
 
-	printk(KERN_DEBUG "Bus freq set to %d start...\n", ddr_rate);
+	printk(KERN_DEBUG "LPDDR2 freq set to %d start...\n", ddr_rate);
 
 	/* ensure that all Cores are in WFE. */
 	local_irq_disable();
@@ -233,7 +233,7 @@ int update_lpddr2_freq_smp(int ddr_rate)
 #endif
 
 	local_irq_enable();
-	printk(KERN_DEBUG "Bus freq set to %d done! cpu=%d\n", ddr_rate, me);
+	printk(KERN_DEBUG "LPDDR2 freq set to %d done! cpu=%d\n", ddr_rate, me);
 
 	return 0;
 }
