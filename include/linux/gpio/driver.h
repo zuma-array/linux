@@ -40,6 +40,7 @@ struct module;
  * @set_multiple: assigns output values for multiple signals defined by "mask"
  * @set_config: optional hook for all kinds of settings. Uses the same
  *	packed config format as generic pinconf.
+ * @set_pull: set the current pull configuration for the GPIO.
  * @to_irq: optional hook supporting non-static gpio_to_irq() mappings;
  *	implementation may not sleep
  * @dbg_show: optional routine to show contents in debugfs; default code
@@ -135,6 +136,10 @@ struct gpio_chip {
 	int			(*set_config)(struct gpio_chip *chip,
 					      unsigned offset,
 					      unsigned long config);
+#ifdef CONFIG_AMLOGIC_PINCTRL
+	int			(*set_pull)(struct gpio_chip *chip,
+						unsigned int offset, int value);
+#endif
 	int			(*to_irq)(struct gpio_chip *chip,
 						unsigned offset);
 
