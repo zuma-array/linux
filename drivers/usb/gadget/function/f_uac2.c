@@ -449,8 +449,6 @@ static void set_ep_max_packet_size(const struct f_uac_opts *uac2_opts,
 	if (is_playback) {
 		chmask = uac2_opts->p_chmask;
 		for (i = 0; i < UAC_MAX_RATES; i++) {
-			if (uac2_opts->p_srate[i] == 0)
-				break;
 			if (uac2_opts->p_srate[i] > srate)
 				srate = uac2_opts->p_srate[i];
 		}
@@ -458,8 +456,6 @@ static void set_ep_max_packet_size(const struct f_uac_opts *uac2_opts,
 	} else {
 		chmask = uac2_opts->c_chmask;
 		for (i = 0; i < UAC_MAX_RATES; i++) {
-			if (uac2_opts->c_srate[i] == 0)
-				break;
 			if (uac2_opts->c_srate[i] > srate)
 				srate = uac2_opts->c_srate[i];
 		}
@@ -751,7 +747,7 @@ in_rq_range(struct usb_function *fn, const struct usb_ctrlrequest *cr)
 				return -EOPNOTSUPP;
 
 			if (srate == 0)
-				break;
+				continue;
 
 			rs.r[rs.wNumSubRanges].dMIN = srate;
 			rs.r[rs.wNumSubRanges].dMAX = srate;

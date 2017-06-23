@@ -595,21 +595,17 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	as_in_type_i_desc.bBitResolution = audio_opts->p_ssize * 8;
 
 	/* Set sample rates */
-	for (i = 0, idx = 0; i < UAC_MAX_RATES; i++) {
-		if (audio_opts->c_srate[i] == 0)
-			break;
-		memcpy(as_out_type_i_desc.tSamFreq[idx++],
-				&audio_opts->c_srate[i], 3);
-	}
+	for (i = 0, idx = 0; i < UAC_MAX_RATES; i++)
+		if (audio_opts->c_srate[i] != 0)
+			memcpy(as_out_type_i_desc.tSamFreq[idx++],
+					&audio_opts->c_srate[i], 3);
 	as_out_type_i_desc.bLength = UAC_FORMAT_TYPE_I_DISCRETE_DESC_SIZE(idx);
 	as_out_type_i_desc.bSamFreqType = idx;
 
-	for (i = 0, idx = 0; i < UAC_MAX_RATES; i++) {
-		if (audio_opts->p_srate[i] == 0)
-			break;
-		memcpy(as_in_type_i_desc.tSamFreq[idx++],
-				&audio_opts->p_srate[i], 3);
-	}
+	for (i = 0, idx = 0; i < UAC_MAX_RATES; i++)
+		if (audio_opts->p_srate[i] != 0)
+			memcpy(as_in_type_i_desc.tSamFreq[idx++],
+					&audio_opts->p_srate[i], 3);
 	as_in_type_i_desc.bLength = UAC_FORMAT_TYPE_I_DISCRETE_DESC_SIZE(idx);
 	as_in_type_i_desc.bSamFreqType = idx;
 

@@ -124,18 +124,45 @@ static ssize_t f_uac_opts_##name##_store(struct config_item *item,	\
 		goto end;						\
 	}								\
 									\
-	i = 0;								\
-	memset(opts->name, 0x00, sizeof(opts->name));			\
-	split_page = kstrdup(page, GFP_KERNEL);				\
-	while ((token = strsep(&split_page, ",")) != NULL) {		\
-		ret = kstrtou32(token, 0, &num);			\
+	if (page[0] == '+') {						\
+		ret = kstrtou32(page + 1, 0, &num);			\
 		if (ret)						\
 			goto end;					\
-									\
-		opts->name[i++] = num;					\
-		opts->name##_active = num;				\
+		ret = -ENOSPC;						\
+		for (i = 0; i < UAC_MAX_RATES; i++) {			\
+			if (opts->name[i] == 0) {			\
+				opts->name[i] = num;			\
+				ret = len;				\
+				break;					\
+			}						\
+		}							\
+	} else if (page[0] == '-') {					\
+		ret = kstrtou32(page + 1, 0, &num);			\
+		if (ret)						\
+			goto end;					\
 		ret = len;						\
-	};								\
+		for (i = 0; i < UAC_MAX_RATES; i++) {			\
+			if (opts->name[i] == num) {			\
+				opts->name[i] = 0;			\
+				if (opts->name##_active == num)		\
+					opts->name##_active = opts->name[0]; \
+				break;					\
+			}						\
+		}							\
+	} else {							\
+		i = 0;							\
+		memset(opts->name, 0x00, sizeof(opts->name));		\
+		split_page = kstrdup(page, GFP_KERNEL);			\
+		while ((token = strsep(&split_page, ",")) != NULL) {	\
+			ret = kstrtou32(token, 0, &num);		\
+			if (ret)					\
+				goto end;				\
+									\
+			opts->name[i++] = num;				\
+			opts->name##_active = num;			\
+			ret = len;					\
+		};							\
+	}								\
 									\
 end:									\
 	kfree(split_page);						\

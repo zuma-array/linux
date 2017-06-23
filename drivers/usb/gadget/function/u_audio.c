@@ -447,8 +447,6 @@ int u_audio_set_capture_srate(struct g_audio *audio_dev, int srate)
 					SNDRV_CTL_EVENT_MASK_VALUE, &ctl->id);
 			return 0;
 		}
-		if (params->c_srate[i] == 0)
-			break;
 	}
 
 	return -EINVAL;
@@ -468,8 +466,6 @@ int u_audio_set_playback_srate(struct g_audio *audio_dev, int srate)
 					SNDRV_CTL_EVENT_MASK_VALUE, &ctl->id);
 			return 0;
 		}
-		if (params->p_srate[i] == 0)
-			break;
 	}
 
 	return -EINVAL;
