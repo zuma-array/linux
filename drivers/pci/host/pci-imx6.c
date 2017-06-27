@@ -59,6 +59,9 @@ struct imx6_pcie {
 	struct regmap		*reg_src;
 	void __iomem		*mem_base;
 	struct regulator	*pcie_phy_regulator;
+
+	bool			in_suspend;
+	struct mutex		pm_lock;
 };
 
 /* PCIe Root Complex registers (memory-mapped) */
@@ -1041,6 +1044,8 @@ static int pci_imx_suspend_noirq(struct device *dev)
 	struct imx6_pcie *imx6_pcie = dev_get_drvdata(dev);
 	struct pcie_port *pp = &imx6_pcie->pp;
 
+	mutex_lock(&imx6_pcie->pm_lock);
+
 	if (IS_ENABLED(CONFIG_PCI_MSI))
 		dw_pcie_msi_cfg_store(pp);
 
@@ -1084,6 +1089,7 @@ static int pci_imx_suspend_noirq(struct device *dev)
 				IMX6Q_GPR1_PCIE_TEST_PD);
 	}
 
+	mutex_unlock(&imx6_pcie->pm_lock);
 	return 0;
 }
 
@@ -1092,6 +1098,8 @@ static int pci_imx_resume_noirq(struct device *dev)
 	int ret = 0;
 	struct imx6_pcie *imx6_pcie = dev_get_drvdata(dev);
 	struct pcie_port *pp = &imx6_pcie->pp;
+
+	mutex_lock(&imx6_pcie->pm_lock);
 
 	if (is_imx6sx_pcie(imx6_pcie) || is_imx7d_pcie(imx6_pcie)
 			|| is_imx6qp_pcie(imx6_pcie)) {
@@ -1106,8 +1114,10 @@ static int pci_imx_resume_noirq(struct device *dev)
 		imx6_pcie_init_phy(pp);
 
 		ret = imx6_pcie_deassert_core_reset(pp);
-		if (ret < 0)
+		if (ret < 0) {
+			mutex_unlock(&imx6_pcie->pm_lock);
 			return ret;
+		}
 
 		/*
 		 * controller maybe turn off, re-configure again
@@ -1142,6 +1152,7 @@ static int pci_imx_resume_noirq(struct device *dev)
 				IMX6Q_GPR1_PCIE_TEST_PD, 0);
 	}
 
+	mutex_unlock(&imx6_pcie->pm_lock);
 	return 0;
 }
 
@@ -1153,6 +1164,70 @@ static const struct dev_pm_ops pci_imx_pm_ops = {
 	.poweroff_noirq = pci_imx_suspend_noirq,
 	.restore_noirq = pci_imx_resume_noirq,
 };
+
+static ssize_t imx_pci_suspend_store(struct device *dev, struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct imx6_pcie *imx6_pcie = dev_get_drvdata(dev);
+	struct pci_dev *pdev;
+	int input, ret;
+
+	sscanf(buf, "%d\n", &input);
+
+	if (input == 0) {
+		if (!imx6_pcie->in_suspend) {
+			dev_warn(dev, "device was not in suspend\n");
+			return -EINVAL;
+		}
+
+		dev_info(dev, "resuming device from suspend\n");
+		ret = pci_imx_resume_noirq(dev);
+		if (ret < 0) {
+			dev_err(dev, "pci_imx_resume_noirq failed with %d\n", ret);
+		}
+		imx6_pcie->in_suspend = false;
+	} else {
+		if (imx6_pcie->in_suspend) {
+			dev_warn(dev, "device was already in suspend\n");
+			return -EINVAL;
+		}
+
+		if ((pdev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, NULL)) != NULL) {
+			dev_err(dev, "cannot suspend, device %s is still on the bus\n", dev_name(&pdev->dev));
+			pci_dev_put(pdev);
+			return -EPERM;
+		}
+
+		dev_info(dev, "putting device into suspend\n");
+		ret = pci_imx_suspend_noirq(dev);
+		if (ret < 0) {
+			dev_err(dev, "pci_imx_suspend_noirq failed with %d\n", ret);
+			return ret;
+		}
+		imx6_pcie->in_suspend = true;
+	}
+
+	return count;
+}
+
+static ssize_t imx_pci_suspend_show(struct device *dev, struct device_attribute *devattr, char *buf)
+{
+	struct imx6_pcie *imx6_pcie = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%d\n", imx6_pcie->in_suspend ? 1 : 0);
+}
+
+static DEVICE_ATTR(suspend, S_IRUGO | S_IWUSR, imx_pci_suspend_show, imx_pci_suspend_store);
+
+static struct attribute *imx6_pcie_pm_attrs[] = {
+	&dev_attr_suspend.attr,
+	NULL,
+};
+
+static struct attribute_group imx6_pcie_pm_attrgroup = {
+	.attrs	= imx6_pcie_pm_attrs,
+};
+
 #endif
 
 static int __init imx6_pcie_probe(struct platform_device *pdev)
@@ -1170,12 +1245,22 @@ static int __init imx6_pcie_probe(struct platform_device *pdev)
 	pp = &imx6_pcie->pp;
 	pp->dev = &pdev->dev;
 
+	mutex_init(&imx6_pcie->pm_lock);
+
 	if (IS_ENABLED(CONFIG_EP_MODE_IN_EP_RC_SYS)) {
 		/* add attributes for device */
 		ret = sysfs_create_group(&pdev->dev.kobj, &imx_pcie_attrgroup);
 		if (ret)
 			return -EINVAL;
 	}
+
+#ifdef CONFIG_PM_SLEEP
+	ret = sysfs_create_group(&pdev->dev.kobj, &imx6_pcie_pm_attrgroup);
+	if (ret) {
+		dev_warn(&pdev->dev, "sysfs_create_group failed with %d\n", ret);
+		return -EINVAL;
+	}
+#endif
 
 	/* Added for PCI abort handling */
 	hook_fault_code(16 + 6, imx6q_pcie_abort_handler, SIGBUS, 0,
