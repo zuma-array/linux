@@ -568,15 +568,13 @@ static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 					udelay(10);
 					regmap_read(sai->regmap, FSL_SAI_xCSR(tx), &xcsr);
 				} while (--count && xcsr & FSL_SAI_CSR_TERE);
-			}
 
-			/* reset FIFOs */
-			regmap_update_bits(sai->regmap, FSL_SAI_TCSR,
-					   FSL_SAI_CSR_FR, FSL_SAI_CSR_FR);
-			regmap_update_bits(sai->regmap, FSL_SAI_RCSR,
-					   FSL_SAI_CSR_FR, FSL_SAI_CSR_FR);
+				/* reset FIFOs */
+				regmap_update_bits(sai->regmap, FSL_SAI_TCSR,
+						   FSL_SAI_CSR_FR, FSL_SAI_CSR_FR);
+				regmap_update_bits(sai->regmap, FSL_SAI_RCSR,
+						   FSL_SAI_CSR_FR, FSL_SAI_CSR_FR);
 
-			if (!sai->persistent_clocks) {
 				/* Software Reset for both Tx and Rx */
 				regmap_write(sai->regmap, FSL_SAI_TCSR, FSL_SAI_CSR_SR);
 				regmap_write(sai->regmap, FSL_SAI_RCSR, FSL_SAI_CSR_SR);
