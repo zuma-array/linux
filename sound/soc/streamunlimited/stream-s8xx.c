@@ -711,6 +711,8 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 			if (of_get_property(child, "sue,codec-is-mclk-master", NULL))
 				dai_fmt_link |= SND_SOC_DAIFMT_CMM;
 
+			if (of_get_property(child, "sue,continuous-clock", NULL))
+				dai_fmt_link |= SND_SOC_DAIFMT_CONT;
 
 			if (of_get_property(child, "sue,tdm", NULL)) {
 				link->ops = &am33xx_s800_tdm_dai_link_ops;
