@@ -166,19 +166,54 @@ static int am33xx_s800_setup_mcasp(struct snd_pcm_substream *substream, snd_pcm_
 	return 0;
 }
 
-static int am33xx_s800_set_mclk(struct snd_soc_am33xx_s800 *priv, int stream)
+static int stream_s8xx_set_pll(struct snd_soc_am33xx_s800 *priv, unsigned int rate)
+{
+	int ret;
+	u32 pllrate = 0;
+
+	if (IS_ERR(priv->pllclk)) {
+		dev_warn(priv->card.dev, "no PLL clk available\n");
+		return -EINVAL;
+	}
+
+	pllrate = (rate % 8000 == 0) ? IMX7D_SAI_PLL_48k : IMX7D_SAI_PLL_44k1;
+
+	ret = clk_set_rate(priv->pllclk, pllrate);
+	if (ret)
+		dev_warn(priv->card.dev, "failed to set PLL rate: %d\n", ret);
+
+	priv->nominal_pll_rate = clk_get_rate(priv->pllclk);
+	dev_info(priv->card.dev, "Audio pll set to %u\n", priv->nominal_pll_rate);
+
+	return 0;
+}
+
+static unsigned int rate_to_mclk(unsigned int rate)
+{
+	return (rate % 8000 == 0) ? MCLK_48k : MCLK_44k1;
+}
+
+static int am33xx_s800_set_mclk(struct snd_soc_am33xx_s800 *priv, unsigned int rate, int stream)
 {
 	struct clk *mclk;
 	unsigned long mclk_rate;
 	int ret;
 
+	/* First try configure the PLL */
+	ret = stream_s8xx_set_pll(priv, rate);
+	if (ret < 0) {
+		dev_warn(priv->card.dev, "could not set PLL rate: %d\n", ret);
+	}
+
+	mclk_rate = rate_to_mclk(rate);
+
 	if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		mclk = priv->mclk;
-		mclk_rate = priv->mclk_rate;
+		priv->mclk_rate = mclk_rate;
 
 	} else {
 		mclk = priv->mclk_rx;
-		mclk_rate = priv->mclk_rate_rx;
+		priv->mclk_rate_rx = mclk_rate;
 	}
 
 	ret = clk_set_rate(mclk, mclk_rate);
@@ -188,6 +223,8 @@ static int am33xx_s800_set_mclk(struct snd_soc_am33xx_s800 *priv, int stream)
 	ret = clk_prepare_enable(mclk);
 	if (ret < 0)
 		return ret;
+
+	dev_info(priv->card.dev, "Audio mclk set to %lu\n", mclk_rate);
 
 	return 0;
 }
@@ -282,19 +319,15 @@ static int am33xx_s800_common_hw_params(struct snd_pcm_substream *substream,
 	int clk_id, div_mclk, div_bclk, div_lrclk;
 
 	rate = params_rate(params);
-	mclk = (rate % 16000 == 0) ? MCLK_48k : MCLK_44k1;
+	mclk = rate_to_mclk(rate);
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		priv->mclk_rate = mclk;
-
 		clk_id = 0;
 		div_mclk = 0;
 		div_bclk = 1;
 		div_lrclk = 2;
 
 	} else {
-		priv->mclk_rate_rx = mclk;
-
 		clk_id = 1;
 		div_mclk = 10;
 		div_bclk = 11;
@@ -303,38 +336,17 @@ static int am33xx_s800_common_hw_params(struct snd_pcm_substream *substream,
 
 	/* if the codec is MCLK master then do not configure our MCLK source */
 	if ((rtd->dai_link->dai_fmt & SND_SOC_DAIFMT_CMM) == 0) {
-		if (IS_ERR(priv->pllclk)) {
-			dev_warn(card->dev, "no PLL clk available\n");
-		} else {
-			u32 pllrate = 0;
-
-			/*
-			 * Depending on the audio rate we want to use different PLL rates to
-			 * to divide the PLL rate down without any error.
-			 */
-			if ((rate % 8000) == 0)
-				pllrate = IMX7D_SAI_PLL_48k;
-			else
-				pllrate = IMX7D_SAI_PLL_44k1;
-
-			ret = clk_set_rate(priv->pllclk, pllrate);
-			if (ret)
-				dev_warn(card->dev, "failed to set PLL rate %d\n", ret);
-
-			dev_info(card->dev, "Audio pll set to %u\n", pllrate);
-			priv->nominal_pll_rate = clk_get_rate(priv->pllclk);
-		}
-
-
-		ret = am33xx_s800_set_mclk(priv, substream->stream);
+		ret = am33xx_s800_set_mclk(priv, rate, substream->stream);
 		if (ret < 0) {
-			dev_warn(card->dev, "Unsupported MCLK source : %d\n", ret);
+			dev_warn(card->dev, "failed to set MCLK: %d\n", ret);
 			return ret;
 		}
 
-		if (!IS_ERR(priv->pllclk)) {
-			priv->drift = 0;
-			am33xx_s800_apply_drift(card);
+		/* Reset drift back to 0 */
+		priv->drift = 0;
+		ret = am33xx_s800_apply_drift(card);
+		if (ret < 0) {
+			dev_warn(card->dev, "could not set drift for PLL: %d\n", ret);
 		}
 	}
 
@@ -727,13 +739,7 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 	}
 	// TODO: Maybe disable MCLK again if snd_soc_register_card() fails?
 	if (of_get_property(top_node, "sue,early-mclk", NULL)) {
-		u32 pllrate = IMX7D_SAI_PLL_48k;
-		dev_info(dev, "enabling early MCLK\n");
-
-		priv->mclk_rate = MCLK_48k;
-
-		clk_set_rate(priv->pllclk, pllrate);
-		am33xx_s800_set_mclk(priv, SNDRV_PCM_STREAM_PLAYBACK);
+		am33xx_s800_set_mclk(priv, 48000, SNDRV_PCM_STREAM_PLAYBACK);
 	}
 
 	priv->cb_reset_gpio = of_get_named_gpio(top_node, "sue,cb-reset-gpio", 0);
