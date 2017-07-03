@@ -151,7 +151,7 @@ struct fsl_sai {
 	struct snd_dmaengine_dai_dma_data dma_params_rx;
 	struct snd_dmaengine_dai_dma_data dma_params_tx;
 
-	bool persistent_clocks;
+	bool continuous_clock;
 };
 
 #define TX 1

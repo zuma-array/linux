@@ -297,6 +297,12 @@ static int fsl_sai_set_dai_fmt_tr(struct snd_soc_dai *cpu_dai,
 			   FSL_SAI_CR4_MF | FSL_SAI_CR4_FSE |
 			   FSL_SAI_CR4_FSP | FSL_SAI_CR4_FSD_MSTR, val_cr4);
 
+	if (fmt & SND_SOC_DAIFMT_CONT) {
+		sai->continuous_clock = true;
+	} else {
+		sai->continuous_clock = false;
+	}
+
 	return 0;
 }
 
@@ -493,7 +499,7 @@ static int fsl_sai_hw_free(struct snd_pcm_substream *substream,
 
 	if (!sai->is_slave_mode &&
 			sai->mclk_streams & BIT(substream->stream) &&
-			!sai->persistent_clocks) {
+			!sai->continuous_clock) {
 		clk_disable_unprepare(sai->mclk_clk[sai->mclk_id[tx]]);
 		sai->mclk_streams &= ~BIT(substream->stream);
 	}
@@ -556,7 +562,7 @@ static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 		/* Check if the opposite FRDE is also disabled */
 		regmap_read(sai->regmap, FSL_SAI_xCSR(!tx), &xcsr);
 		if (!(xcsr & FSL_SAI_CSR_FRDE)) {
-			if (!sai->persistent_clocks) {
+			if (!sai->continuous_clock) {
 				/* Disable both directions */
 				regmap_update_bits(sai->regmap, FSL_SAI_TCSR,
 						   FSL_SAI_CSR_TERE, 0);
@@ -606,7 +612,7 @@ static int fsl_sai_startup(struct snd_pcm_substream *substream,
 
 	pm_runtime_get_sync(cpu_dai->dev);
 
-	if (!sai->persistent_clocks) {
+	if (!sai->continuous_clock) {
 		ret = clk_prepare_enable(sai->bus_clk);
 
 		if (ret) {
@@ -633,7 +639,7 @@ static void fsl_sai_shutdown(struct snd_pcm_substream *substream,
 	if (sai->is_stream_opened[tx]) {
 		regmap_update_bits(sai->regmap, FSL_SAI_xCR3(tx), FSL_SAI_CR3_TRCE, 0);
 
-		if (!sai->persistent_clocks)
+		if (!sai->continuous_clock)
 			clk_disable_unprepare(sai->bus_clk);
 
 		sai->is_stream_opened[tx] = false;
@@ -818,8 +824,6 @@ static int fsl_sai_probe(struct platform_device *pdev)
 
 	sai->is_lsb_first = of_property_read_bool(np, "lsb-first");
 
-	sai->persistent_clocks = of_property_read_bool(np, "sue,persistent-clocks");
-
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	base = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(base))
@@ -843,15 +847,6 @@ static int fsl_sai_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to get bus clock: %ld\n",
 				PTR_ERR(sai->bus_clk));
 		sai->bus_clk = NULL;
-	} else {
-		if (sai->persistent_clocks) {
-			ret = clk_prepare_enable(sai->bus_clk);
-
-			if (ret) {
-				dev_err(&pdev->dev, "failed to enable bus clock: %d\n", ret);
-				return ret;
-			}
-		}
 	}
 
 	sai->mclk_clk[0] = sai->bus_clk;
