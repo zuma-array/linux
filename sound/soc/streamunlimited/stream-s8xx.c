@@ -58,7 +58,7 @@ struct snd_soc_am33xx_s800 {
 
 /*
  * This function applies the drift in ppm to the current PLL value.
- * If no PLL is specified nothing happens.
+ * If no PLL is specified this function returns -EINVAL.
  */
 static int am33xx_s800_apply_drift(struct snd_soc_card *card)
 {
@@ -68,7 +68,7 @@ static int am33xx_s800_apply_drift(struct snd_soc_card *card)
 	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
 
 	if (IS_ERR(priv->pllclk))
-		return 0;
+		return -EINVAL;
 
 	drift = priv->drift;
 	sgn = drift > 0 ? 1 : -1;
