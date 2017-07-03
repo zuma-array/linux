@@ -152,6 +152,7 @@ struct fsl_sai {
 	struct snd_dmaengine_dai_dma_data dma_params_tx;
 
 	bool continuous_clock;
+	bool continuous_clock_init_done;
 };
 
 #define TX 1

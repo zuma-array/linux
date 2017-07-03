@@ -278,12 +278,133 @@ static int fsl_sai_set_bclk(struct snd_soc_dai *dai, bool tx, u32 freq)
 	return 0;
 }
 
+static int fsl_sai_enable_mclk(struct fsl_sai *sai, bool tx, int stream)
+{
+	int ret;
+
+	/* Do not enable the clock if it is already enabled */
+	if (!(sai->mclk_streams & BIT(stream))) {
+		ret = clk_prepare_enable(sai->mclk_clk[sai->mclk_id[tx]]);
+		if (ret)
+			return ret;
+
+		sai->mclk_streams |= BIT(stream);
+	}
+
+	return 0;
+}
+
+/* NOTE: word_width and slot_width can be different */
+void fsl_sai_set_cr4_cr5(struct fsl_sai *sai, bool tx, u32 word_width, u32 slot_width, unsigned int channels)
+{
+	u32 val_cr4 = 0, val_cr5 = 0;
+
+	if (!sai->is_dsp_mode)
+		val_cr4 |= FSL_SAI_CR4_SYWD(slot_width);
+
+	val_cr5 |= FSL_SAI_CR5_WNW(slot_width);
+	val_cr5 |= FSL_SAI_CR5_W0W(slot_width);
+
+	if (sai->is_lsb_first)
+		val_cr5 |= FSL_SAI_CR5_FBT(0);
+	else
+		val_cr5 |= FSL_SAI_CR5_FBT(word_width - 1);
+
+	val_cr4 |= FSL_SAI_CR4_FRSZ(sai->slots);
+
+	/*
+	 * For SAI master mode, when Tx(Rx) sync with Rx(Tx) clock, Rx(Tx) will
+	 * generate bclk and frame clock for Tx(Rx), we should set RCR4(TCR4),
+	 * RCR5(TCR5) and RMR(TMR) for playback(capture), or there will be sync
+	 * error.
+	 */
+
+	if (!sai->is_slave_mode) {
+		if (!sai->synchronous[TX] && sai->synchronous[RX] && !tx) {
+			regmap_update_bits(sai->regmap, FSL_SAI_TCR4,
+				FSL_SAI_CR4_SYWD_MASK | FSL_SAI_CR4_FRSZ_MASK,
+				val_cr4);
+			regmap_update_bits(sai->regmap, FSL_SAI_TCR5,
+				FSL_SAI_CR5_WNW_MASK | FSL_SAI_CR5_W0W_MASK |
+				FSL_SAI_CR5_FBT_MASK, val_cr5);
+			regmap_write(sai->regmap, FSL_SAI_TMR,
+				~0UL - ((1 << channels) - 1));
+		} else if (!sai->synchronous[RX] && sai->synchronous[TX] && tx) {
+			regmap_update_bits(sai->regmap, FSL_SAI_RCR4,
+				FSL_SAI_CR4_SYWD_MASK | FSL_SAI_CR4_FRSZ_MASK,
+				val_cr4);
+			regmap_update_bits(sai->regmap, FSL_SAI_RCR5,
+				FSL_SAI_CR5_WNW_MASK | FSL_SAI_CR5_W0W_MASK |
+				FSL_SAI_CR5_FBT_MASK, val_cr5);
+			regmap_write(sai->regmap, FSL_SAI_RMR,
+				~0UL - ((1 << channels) - 1));
+		}
+	}
+
+	regmap_update_bits(sai->regmap, FSL_SAI_xCR4(tx),
+			   FSL_SAI_CR4_SYWD_MASK | FSL_SAI_CR4_FRSZ_MASK,
+			   val_cr4);
+	regmap_update_bits(sai->regmap, FSL_SAI_xCR5(tx),
+			   FSL_SAI_CR5_WNW_MASK | FSL_SAI_CR5_W0W_MASK |
+			   FSL_SAI_CR5_FBT_MASK, val_cr5);
+	regmap_write(sai->regmap, FSL_SAI_xMR(tx), ~0UL - ((1 << channels) - 1));
+}
+
+static int fsl_sai_init_continuous_clock(struct snd_soc_dai *cpu_dai)
+{
+	struct fsl_sai *sai = snd_soc_dai_get_drvdata(cpu_dai);
+
+	bool tx = true;
+	unsigned int channels = 2;
+	unsigned int rate = 48000;
+	int ret, i;
+
+	/* We can only output clocks on boot in master mode */
+	if (sai->is_slave_mode)
+		return -EINVAL;
+
+	ret = fsl_sai_set_bclk(cpu_dai, tx, sai->slots * sai->slot_width * rate);
+	if (ret)
+		return ret;
+
+	ret = fsl_sai_enable_mclk(sai, tx, SNDRV_PCM_STREAM_PLAYBACK);
+	if (ret)
+		return ret;
+
+	fsl_sai_set_cr4_cr5(sai, tx, sai->slot_width, sai->slot_width, channels);
+
+
+	/*
+	 * NOTE: This is taken from the fsl_sai_trigger() funtion, although we do
+	 * not enable the interrupts here.
+	 */
+	regmap_update_bits(sai->regmap, FSL_SAI_TCR2, FSL_SAI_CR2_SYNC,
+		           sai->synchronous[TX] ? FSL_SAI_CR2_SYNC : 0);
+	regmap_update_bits(sai->regmap, FSL_SAI_RCR2, FSL_SAI_CR2_SYNC,
+			   sai->synchronous[RX] ? FSL_SAI_CR2_SYNC : 0);
+
+
+	for (i = 0; tx && i < channels; i++)
+		regmap_write(sai->regmap, FSL_SAI_TDR, 0x0);
+	if (tx)
+		udelay(10);
+
+	regmap_update_bits(sai->regmap, FSL_SAI_RCSR,
+			   FSL_SAI_CSR_TERE, FSL_SAI_CSR_TERE);
+	regmap_update_bits(sai->regmap, FSL_SAI_TCSR,
+			   FSL_SAI_CSR_TERE, FSL_SAI_CSR_TERE);
+
+
+	return 0;
+}
+
 static int fsl_sai_set_dai_fmt_tr(struct snd_soc_dai *cpu_dai,
 				unsigned int fmt, int fsl_dir)
 {
 	struct fsl_sai *sai = snd_soc_dai_get_drvdata(cpu_dai);
 	bool tx = fsl_dir == FSL_FMT_TRANSMITTER;
 	u32 val_cr2 = 0, val_cr4 = 0;
+	int ret;
 
 	if (!sai->is_lsb_first)
 		val_cr4 |= FSL_SAI_CR4_MF;
@@ -382,10 +503,22 @@ static int fsl_sai_set_dai_fmt_tr(struct snd_soc_dai *cpu_dai,
 			   FSL_SAI_CR4_MF | FSL_SAI_CR4_FSE |
 			   FSL_SAI_CR4_FSP | FSL_SAI_CR4_FSD_MSTR, val_cr4);
 
-	if (fmt & SND_SOC_DAIFMT_CONT) {
-		sai->continuous_clock = true;
-	} else {
-		sai->continuous_clock = false;
+	if (tx) {
+		/*
+		 * We also make sure to call fsl_sai_init_continuos_clock() once, since some
+		 * audio drivers will call set_dai_ftm() on every hw_params() call.
+		 */
+		if (fmt & SND_SOC_DAIFMT_CONT && !sai->continuous_clock_init_done) {
+			sai->continuous_clock = true;
+			ret = fsl_sai_init_continuous_clock(cpu_dai);
+			sai->continuous_clock_init_done = true;
+
+			if (ret < 0) {
+				dev_warn(cpu_dai->dev, "failed to init continuous clock\n");
+			}
+		} else {
+			sai->continuous_clock = false;
+		}
 	}
 
 	return 0;
@@ -416,7 +549,6 @@ static int fsl_sai_hw_params(struct snd_pcm_substream *substream,
 	bool tx = substream->stream == SNDRV_PCM_STREAM_PLAYBACK;
 	unsigned int channels = params_channels(params);
 	u32 word_width = params_width(params);
-	u32 val_cr4 = 0, val_cr5 = 0;
 	u32 slot_width = word_width;
 	int ret;
 
@@ -424,69 +556,15 @@ static int fsl_sai_hw_params(struct snd_pcm_substream *substream,
 		slot_width = sai->slot_width;
 		ret = fsl_sai_set_bclk(cpu_dai, tx,
 				sai->slots * slot_width * params_rate(params));
-
 		if (ret)
 			return ret;
 
-		/* Do not enable the clock if it is already enabled */
-		if (!(sai->mclk_streams & BIT(substream->stream))) {
-			ret = clk_prepare_enable(sai->mclk_clk[sai->mclk_id[tx]]);
-			if (ret)
-				return ret;
-
-			sai->mclk_streams |= BIT(substream->stream);
-		}
+		ret = fsl_sai_enable_mclk(sai, tx, substream->stream);
+		if (ret)
+			return ret;
 	}
 
-	if (!sai->is_dsp_mode)
-		val_cr4 |= FSL_SAI_CR4_SYWD(slot_width);
-
-	val_cr5 |= FSL_SAI_CR5_WNW(slot_width);
-	val_cr5 |= FSL_SAI_CR5_W0W(slot_width);
-
-	if (sai->is_lsb_first)
-		val_cr5 |= FSL_SAI_CR5_FBT(0);
-	else
-		val_cr5 |= FSL_SAI_CR5_FBT(word_width - 1);
-
-	val_cr4 |= FSL_SAI_CR4_FRSZ(sai->slots);
-
-	/*
-	 * For SAI master mode, when Tx(Rx) sync with Rx(Tx) clock, Rx(Tx) will
-	 * generate bclk and frame clock for Tx(Rx), we should set RCR4(TCR4),
-	 * RCR5(TCR5) and RMR(TMR) for playback(capture), or there will be sync
-	 * error.
-	 */
-
-	if (!sai->is_slave_mode) {
-		if (!sai->synchronous[TX] && sai->synchronous[RX] && !tx) {
-			regmap_update_bits(sai->regmap, FSL_SAI_TCR4,
-				FSL_SAI_CR4_SYWD_MASK | FSL_SAI_CR4_FRSZ_MASK,
-				val_cr4);
-			regmap_update_bits(sai->regmap, FSL_SAI_TCR5,
-				FSL_SAI_CR5_WNW_MASK | FSL_SAI_CR5_W0W_MASK |
-				FSL_SAI_CR5_FBT_MASK, val_cr5);
-			regmap_write(sai->regmap, FSL_SAI_TMR,
-				~0UL - ((1 << channels) - 1));
-		} else if (!sai->synchronous[RX] && sai->synchronous[TX] && tx) {
-			regmap_update_bits(sai->regmap, FSL_SAI_RCR4,
-				FSL_SAI_CR4_SYWD_MASK | FSL_SAI_CR4_FRSZ_MASK,
-				val_cr4);
-			regmap_update_bits(sai->regmap, FSL_SAI_RCR5,
-				FSL_SAI_CR5_WNW_MASK | FSL_SAI_CR5_W0W_MASK |
-				FSL_SAI_CR5_FBT_MASK, val_cr5);
-			regmap_write(sai->regmap, FSL_SAI_RMR,
-				~0UL - ((1 << channels) - 1));
-		}
-	}
-
-	regmap_update_bits(sai->regmap, FSL_SAI_xCR4(tx),
-			   FSL_SAI_CR4_SYWD_MASK | FSL_SAI_CR4_FRSZ_MASK,
-			   val_cr4);
-	regmap_update_bits(sai->regmap, FSL_SAI_xCR5(tx),
-			   FSL_SAI_CR5_WNW_MASK | FSL_SAI_CR5_W0W_MASK |
-			   FSL_SAI_CR5_FBT_MASK, val_cr5);
-	regmap_write(sai->regmap, FSL_SAI_xMR(tx), ~0UL - ((1 << channels) - 1));
+	fsl_sai_set_cr4_cr5(sai, tx, word_width, slot_width, channels);
 
 	return 0;
 }
