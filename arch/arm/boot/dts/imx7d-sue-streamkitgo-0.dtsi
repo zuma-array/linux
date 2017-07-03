@@ -21,6 +21,7 @@
 			link@0 {
 				sue,codec = <&tlv320aic3104>;
 				sue,codec-dai-name = "tlv320aic3x-hifi";
+				sue,continuous-clock;
 			};
 		};
 	};

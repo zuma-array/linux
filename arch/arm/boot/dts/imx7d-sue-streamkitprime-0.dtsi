@@ -38,6 +38,7 @@
 				sue,cpu-dai-name = "308a0000.sai";
 				sue,codec = <&pcm_dummy1>;
 				sue,codec-dai-name = "Dummy PCM Codec";
+				sue,continuous-clock;
 			};
 
 			sai2_link: link@1 {
@@ -223,7 +224,6 @@
 			  <&clks IMX7D_SAI2_ROOT_CLK>;
 	assigned-clock-parents = <0>, <&clks IMX7D_PLL_AUDIO_POST_DIV>;
 	assigned-clock-rates = <884736000>, <0>, <24576000>;
-	sue,persistent-clocks;
 	status = "okay";
 };
 

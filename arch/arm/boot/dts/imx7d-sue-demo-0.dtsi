@@ -39,6 +39,7 @@
 				sue,cpu-dai-name = "308a0000.sai";
 				sue,codec = <&audio_codec>;
 				sue,codec-dai-name = "pcm3060-hifi";
+				sue,continuous-clock;
 			};
 		};
 	};
