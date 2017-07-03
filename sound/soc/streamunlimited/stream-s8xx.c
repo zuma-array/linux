@@ -688,6 +688,9 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 
 		link = priv->card.dai_link;
 
+		/*
+		 * TODO: use helper function: snd_soc_of_parse_daifmt()
+		 */
 		for_each_child_of_node(node, child) {
 			unsigned int dai_fmt_link = 0;
 
