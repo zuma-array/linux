@@ -13538,6 +13538,7 @@ F: drivers/amlogic/pwm/*
 F: include/linux/amlogic/pwm_meson.h
 F: include/dt-bindings/pwm/meosn.h
 F: arch/arm64/boot/dts/amlogic/gxl_p212_2g.dts
+F: arch/arm64/boot/dts/amlogic/gxl_p230_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxm_q200_2g.dts
 
 AMLOGIC multimedia
@@ -13585,6 +13586,7 @@ F:  drivers/amlogic/media/Kconfig
 F:  drivers/amlogic/media/Makefile
 F:  arch/arm64/boot/dts/amlogic/gxl_p212_1g.dts
 F:  arch/arm64/boot/dts/amlogic/gxl_p212_2g.dts
+F:  arch/arm64/boot/dts/amlogic/gxl_p230_2g.dts
 F:  arch/arm64/boot/dts/amlogic/gxm_q200_2g.dts
 F:  drivers/amlogic/clk/clk_media.c
 F:  include/linux/amlogic/media/vout/vout_notify.h
@@ -13639,6 +13641,7 @@ AMLOGIC TVIN
 M: Dezhi Kong <dezhi.kong@amlogic.com>
 F: arch/arm64/boot/dts/amlogic/gxl_p212_1g.dts
 F: arch/arm64/boot/dts/amlogic/gxl_p212_2g.dts
+F: arch/arm64/boot/dts/amlogic/gxl_p230_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxm_q200_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxm_skt.dts
 F: arch/arm64/configs/meson64_defconfig
@@ -13668,6 +13671,7 @@ AMLOGIC key_manage
 M: Nan Li <nan.li@amlogic.com>
 F: arch/arm64/boot/dts/amlogic/gxl_p212_1g.dts
 F: arch/arm64/boot/dts/amlogic/gxl_p212_2g.dts
+F: arch/arm64/boot/dts/amlogic/gxl_p230_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxm_q200_2g.dts
 F: arch/arm64/configs/meson64_defconfig
 F: drivers/amlogic/Kconfig
@@ -13709,6 +13713,7 @@ ANLOGIC AUDIO
 M: Xing Wang <xing.wang@amlogic.com>
 F: arch/arm64/boot/dts/amlogic/gxl_p212_1g.dts
 F: arch/arm64/boot/dts/amlogic/gxl_p212_2g.dts
+F: arch/arm64/boot/dts/amlogic/gxl_p230_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxm_q200_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxm_skt.dts
 F: arch/arm64/boot/dts/amlogic/mesongxl.dtsi
@@ -13734,6 +13739,7 @@ AMLOGIC PPMGR DRIVER
 M: Guosong Zhou <guosong.zhou@amlogic.com>
 F: arch/arm64/boot/dts/amlogic/gxl_p212_1g.dts
 F: arch/arm64/boot/dts/amlogic/gxl_p212_2g.dts
+F: arch/arm64/boot/dts/amlogic/gxl_p230_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxm_q200_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxl_p400_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxm_p401_2g.dts
@@ -13790,6 +13796,7 @@ AMLOGIC IONVIDEO DRIVER
 M: Guosong Zhou <guosong.zhou@amlogic.com>
 F: arch/arm64/boot/dts/amlogic/gxl_p212_1g.dts
 F: arch/arm64/boot/dts/amlogic/gxl_p212_2g.dts
+F: arch/arm64/boot/dts/amlogic/gxl_p230_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxm_q200_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxl_p400_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxm_p401_2g.dts
@@ -13862,6 +13869,7 @@ F: arch/arm/boot/dts/amlogic/meson8b_m200.dts
 F: arch/arm/configs/meson32_defconfig
 F: arch/arm64/boot/dts/amlogic/gxl_p212_1g.dts
 F: arch/arm64/boot/dts/amlogic/gxl_p212_2g.dts
+F: arch/arm64/boot/dts/amlogic/gxl_p230_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxl_p400_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxl_p401_2g.dts
 F: arch/arm64/boot/dts/amlogic/gxm_q200_2g.dts
@@ -13983,3 +13991,7 @@ M:	jiaxing.ye <jiaxing.ye@amlogic.com>
 F:	driver/amlogic/ddr_window/Makefile
 F:	driver/amlogic/ddr_window/ddr_window.c
 F:	driver/amlogic/ddr_window/Kconfig
+
+AMLOGIC AUDIO INFO
+M:	wang xing <xing.wang@amlogic.com>
+F: drivers/amlogic/audioinfo/
