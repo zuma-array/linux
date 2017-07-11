@@ -52,6 +52,18 @@
 
 				sue,tdm;
 			};
+
+			sai3_link: link@3 {
+				sue,name = "analog3";
+				sue,stream-name = "I2S2";
+
+				sue,platform = <&sai3>;
+				sue,cpu-dai-name = "308c0000.sai";
+				sue,codec = <&pcm_dummy3>;
+				sue,codec-dai-name = "Dummy PCM Codec";
+
+				sue,codec-is-bfclk-master;
+			};
 		};
 	};
 
@@ -65,6 +77,10 @@
 	};
 
 	pcm_dummy2: pcm_dummy2 {
+		compatible = "sue,pcm_dummy";
+	};
+
+	pcm_dummy3: pcm_dummy3 {
 		compatible = "sue,pcm_dummy";
 	};
 
@@ -213,6 +229,15 @@
 				MX7D_PAD_SAI2_RX_DATA__SAI2_RX_DATA0	0x11	/* I2S_DATA_IN2 */
 			>;
 		};
+
+		pinctrl_sai3: sai3grp {
+			fsl,pins = <
+				MX7D_PAD_SD1_DATA1__SAI3_TX_BCLK	0x13	/* I2S_BCLK_OUT1_3 */
+				MX7D_PAD_SD1_DATA2__SAI3_TX_SYNC	0x13	/* I2S_WCLK_OUT1_3 */
+				MX7D_PAD_SD1_DATA3__SAI3_TX_DATA0	0x13	/* I2S_DATA_OUT3 */
+				MX7D_PAD_SD1_DATA0__SAI3_RX_DATA0	0x13	/* I2S_DATA_IN3 */
+			>;
+		};
 	};
 };
 
@@ -224,6 +249,18 @@
 			  <&clks IMX7D_SAI2_ROOT_CLK>;
 	assigned-clock-parents = <0>, <&clks IMX7D_PLL_AUDIO_POST_DIV>;
 	assigned-clock-rates = <884736000>, <0>, <24576000>;
+	status = "okay";
+};
+
+&sai3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_sai3>;
+
+	assigned-clocks = <&clks IMX7D_SAI3_ROOT_SRC>,
+			  <&clks IMX7D_SAI3_ROOT_CLK>;
+	assigned-clock-parents = <&clks IMX7D_PLL_AUDIO_POST_DIV>;
+	assigned-clock-rates = <0>, <24576000>;
+
 	status = "okay";
 };
 
