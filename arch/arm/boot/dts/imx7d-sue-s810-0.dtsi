@@ -79,6 +79,11 @@
 	status = "disabled";
 };
 
+&clks {
+	assigned-clocks = <&clks IMX7D_PLL_AUDIO_POST_DIV>;
+	assigned-clock-rates = <884736000>;
+};
+
 &cpu0 {
 	arm-supply = <&vdd_arm>;
 };
@@ -367,11 +372,10 @@
 	 */
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_sai1 &pinctrl_sai1_mclk>;
-	assigned-clocks = <&clks IMX7D_PLL_AUDIO_POST_DIV>,
-			  <&clks IMX7D_SAI1_ROOT_SRC>,
+	assigned-clocks = <&clks IMX7D_SAI1_ROOT_SRC>,
 			  <&clks IMX7D_SAI1_ROOT_CLK>;
-	assigned-clock-parents = <0>, <&clks IMX7D_PLL_AUDIO_POST_DIV>;
-	assigned-clock-rates = <884736000>, <0>, <24576000>;
+	assigned-clock-parents = <&clks IMX7D_PLL_AUDIO_POST_DIV>;
+	assigned-clock-rates = <0>, <24576000>;
 	status = "okay";
 };
 
