@@ -497,6 +497,9 @@ static int fsl_sai_set_dai_fmt_tr(struct snd_soc_dai *cpu_dai,
 		return -EINVAL;
 	}
 
+	if (sai->is_slave_mode)
+		dev_info(cpu_dai->dev, "running as slave\n");
+
 	regmap_update_bits(sai->regmap, FSL_SAI_xCR2(tx),
 			   FSL_SAI_CR2_BCP | FSL_SAI_CR2_BCD_MSTR, val_cr2);
 	regmap_update_bits(sai->regmap, FSL_SAI_xCR4(tx),
@@ -552,8 +555,30 @@ static int fsl_sai_hw_params(struct snd_pcm_substream *substream,
 	u32 slot_width = word_width;
 	int ret;
 
+	/*
+	 * NOTE: in master mode we always set the slot_width to sai->slot_width
+	 * which is 32 bits. In slave mode we actually should set the slot_width
+	 * to the word_width because we assume an external codec will deliver us
+	 * slots with the word_width size. But this creates an issue when we run
+	 * SAI3 as the clock slave to SAI1. SAI1 will be running in master mode
+	 * and have a slot_width of 32 bits, but SAI3 will be running in slave
+	 * mode and set the slot_width to the word_width, this will break when
+	 * using 16 bits word_width, because SAI1 will output clocks for a
+	 * slot_width of 32 bits, but SAI3 expects clocks for a
+	 * slot_width = word_width = 16 bits, so this will break the playback.
+	 *
+	 * To circumvent this issue we always set the slot_width to sai->slot_width
+	 * and not only when running as master, for the rare case where we actually want
+	 * real 16 bit slot width in slave mode we print a message anytime the word_width
+	 * does not match the slot_width and we are in slave mode.
+	 */
+	slot_width = sai->slot_width;
+
+	if (sai->is_slave_mode && (slot_width != word_width)) {
+		dev_warn(cpu_dai->dev, "running in slave mode, word_width %u != slot_width %u\n", word_width, slot_width);
+	}
+
 	if (!sai->is_slave_mode) {
-		slot_width = sai->slot_width;
 		ret = fsl_sai_set_bclk(cpu_dai, tx,
 				sai->slots * slot_width * params_rate(params));
 		if (ret)
