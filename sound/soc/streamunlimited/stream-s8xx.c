@@ -54,6 +54,8 @@ struct snd_soc_am33xx_s800 {
 	/* i.MX7D specific */
 	struct clk *pllclk;
 	u32 nominal_pll_rate;
+
+	bool early_mclk;
 };
 
 /*
@@ -193,6 +195,10 @@ static unsigned int rate_to_mclk(unsigned int rate)
 	return (rate % 8000 == 0) ? MCLK_48k : MCLK_44k1;
 }
 
+/*
+ * NOTE: This function now only sets the rate of the mclk, but does not prepare/enables the clock,
+ * so you need to make sure the clock is enabled or wil be enabled.
+ */
 static int am33xx_s800_set_mclk(struct snd_soc_am33xx_s800 *priv, unsigned int rate, int stream)
 {
 	struct clk *mclk;
@@ -217,10 +223,6 @@ static int am33xx_s800_set_mclk(struct snd_soc_am33xx_s800 *priv, unsigned int r
 	}
 
 	ret = clk_set_rate(mclk, mclk_rate);
-	if (ret < 0)
-		return ret;
-
-	ret = clk_prepare_enable(mclk);
 	if (ret < 0)
 		return ret;
 
@@ -434,23 +436,68 @@ static int am33xx_s800_i2s_hw_params(struct snd_pcm_substream *substream,
 
 static int am33xx_s800_common_hw_free(struct snd_pcm_substream *substream)
 {
+
+	return 0;
+}
+
+int stream_s8xx_common_startup(struct snd_pcm_substream *substream)
+{
+
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_soc_card *card = codec_dai->component->card;
 	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
+	struct clk *mclk;
+	int ret;
 
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		priv->mclk_rate = 0;
-	} else {
-		priv->mclk_rate_rx = 0;
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		mclk = priv->mclk;
+	else
+		mclk = priv->mclk_rx;
+
+	/*
+	 * If we are running in master mode we need do `disable` the clock,
+	 * this will lower the refcount since we enabled it on hw_params.
+	 */
+	if ((rtd->dai_link->dai_fmt & SND_SOC_DAIFMT_CMM) == 0) {
+		ret = clk_prepare_enable(mclk);
+		if (ret < 0)
+			return ret;
 	}
 
 	return 0;
 }
 
+void stream_s8xx_common_shutdown(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_card *card = codec_dai->component->card;
+	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
+	struct clk *mclk;
+
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		mclk = priv->mclk;
+		priv->mclk_rate = 0;
+	} else {
+		mclk = priv->mclk_rx;
+		priv->mclk_rate_rx = 0;
+	}
+
+	/*
+	 * If we are running in master mode we need do `disable` the clock,
+	 * this will lower the refcount since we enabled it on hw_params.
+	 */
+	if ((rtd->dai_link->dai_fmt & SND_SOC_DAIFMT_CMM) == 0) {
+		clk_disable_unprepare(mclk);
+	}
+}
+
 static struct snd_soc_ops am33xx_s800_i2s_dai_link_ops = {
 	.hw_params	= am33xx_s800_i2s_hw_params,
 	.hw_free	= am33xx_s800_common_hw_free,
+	.startup	= stream_s8xx_common_startup,
+	.shutdown	= stream_s8xx_common_shutdown,
 };
 
 static int am33xx_s800_tdm_hw_params(struct snd_pcm_substream *substream,
@@ -462,6 +509,8 @@ static int am33xx_s800_tdm_hw_params(struct snd_pcm_substream *substream,
 static struct snd_soc_ops am33xx_s800_tdm_dai_link_ops = {
 	.hw_params	= am33xx_s800_tdm_hw_params,
 	.hw_free	= am33xx_s800_common_hw_free,
+	.startup	= stream_s8xx_common_startup,
+	.shutdown	= stream_s8xx_common_shutdown,
 };
 
 static int am33xx_s800_drift_info(struct snd_kcontrol *kcontrol,
@@ -743,7 +792,10 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 		}
 	}
 	// TODO: Maybe disable MCLK again if snd_soc_register_card() fails?
+	priv->early_mclk = false;
 	if (of_get_property(top_node, "sue,early-mclk", NULL)) {
+		priv->early_mclk = true;
+		clk_prepare_enable(priv->mclk);
 		am33xx_s800_set_mclk(priv, 48000, SNDRV_PCM_STREAM_PLAYBACK);
 	}
 
@@ -863,6 +915,13 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 static int snd_soc_am33xx_s800_remove(struct platform_device *pdev)
 {
 	struct snd_soc_am33xx_s800 *priv = platform_get_drvdata(pdev);
+
+	/*
+	 * If we had the early_mclk feature enabled we need to disable the clock
+	 * again to have proper refcounting.
+	 */
+	if (priv->early_mclk)
+		clk_disable_unprepare(priv->mclk);
 
 	snd_soc_unregister_card(&priv->card);
 	regulator_disable(priv->regulator);
