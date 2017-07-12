@@ -8,7 +8,7 @@
 
 / {
 	model = "StreamUnlimited stream810 StreamKit Prime board (imx7d)";
-	compatible = "sue,stream810-demo", "sue,stream810", "fsl,imx7d";
+	compatible = "sue,streamkitprime", "sue,stream810", "fsl,imx7d";
 
 	audio {
 		pinctrl-names = "default";

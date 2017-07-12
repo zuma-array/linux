@@ -7,6 +7,9 @@
 #include "imx7d-sue-demo-basic-0.dtsi"
 
 / {
+	model = "StreamUnlimited stream810 StreamKit Go board (imx7d)";
+	compatible = "sue,streamkitgo", "sue,stream810", "fsl,imx7d";
+
 	audio {
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_audio>;
