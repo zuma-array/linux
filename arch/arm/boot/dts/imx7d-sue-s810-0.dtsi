@@ -59,6 +59,19 @@
 			enable-active-high;
 		};
 	};
+
+	gpio_buttons: gpio-keys {
+		compatible = "gpio-keys";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_gpio_buttons>;
+
+		button_sense {
+			label = "button_sense";
+			gpios = <&gpio3 21 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_SLEEP>;
+			gpio-key,wakeup;
+		};
+	};
 };
 
 &adc1 {
@@ -265,6 +278,12 @@
 			>;
 		};
 
+		pinctrl_gpio_buttons: gpio-buttons {
+			fsl,pins = <
+				MX7D_PAD_LCD_DATA16__GPIO3_IO21		0x0
+			>;
+		};
+
 		pinctrl_i2c2: i2c2grp {
 			fsl,pins = <
 				MX7D_PAD_UART2_RX_DATA__I2C2_SCL	0x4000007f
@@ -340,7 +359,7 @@
 
 		pinctrl_sai1_mclk: sai1grp_mclk {
 			fsl,pins = <
-				MX7D_PAD_GPIO1_IO01__SAI1_MCLK	0x14	/* I2S_MCLK_INOUT */
+				MX7D_PAD_GPIO1_IO01__SAI1_MCLK	0x03	/* I2S_MCLK_INOUT */
 			>;
 		};
 

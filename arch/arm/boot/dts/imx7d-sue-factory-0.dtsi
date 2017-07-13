@@ -11,6 +11,10 @@
 	compatible = "sue,stream810-factory", "sue,stream810", "fsl,imx7d";
 };
 
+&gpio_buttons {
+	status = "disabled";
+};
+
 &i2c2 {
 	status = "disabled";
 };

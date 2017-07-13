@@ -51,13 +51,6 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_gpio_keys>;
 
-		button@1 {
-			label = "wakeup_sleep";
-			linux,code = <KEY_SLEEP>;
-			gpios = <&gpio3 21 GPIO_ACTIVE_HIGH>;
-			gpio-key,wakeup;
-		};
-
 		button@2 {
 			label = "wps";
 			linux,code = <KEY_WPS_BUTTON>;
@@ -186,8 +179,6 @@
 
 		pinctrl_gpio_keys: gpiokeysgrp {
 			fsl,pins = <
-				MX7D_PAD_LCD_DATA16__GPIO3_IO21			0x00		/* BUTTON_SENSE */
-
 				/*
 				 * I2S_BCLK_OUT2 (now used for the WPS button since
 				 * the GPIO1_IO0 pad from before is now used for the watchdog reset.

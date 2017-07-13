@@ -47,6 +47,19 @@
 			enable-active-high;
 		};
 	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_gpio_buttons>;
+
+		button_sense {
+			label = "button_sense";
+			gpios = <&gpio3 21 GPIO_ACTIVE_HIGH>;
+			linux,code = <KEY_SLEEP>;
+			gpio-key,wakeup;
+		};
+	};
 };
 
 &adc1 {
@@ -230,6 +243,12 @@
 
 				/* nRESET pin */
 				MX7D_PAD_ECSPI2_MISO__GPIO4_IO22	0x80000000
+			>;
+		};
+
+		pinctrl_gpio_buttons: gpio-buttons {
+			fsl,pins = <
+				MX7D_PAD_LCD_DATA16__GPIO3_IO21		0x0
 			>;
 		};
 
