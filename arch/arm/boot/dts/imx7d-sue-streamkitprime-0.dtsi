@@ -108,7 +108,7 @@
 	status = "okay";
 
 	spidev0: spi@0 {
-		compatible = "spidev";
+		compatible = "sue,s810";
 		reg = <0>;
 		spi-max-frequency = <54000000>;
 	};
