@@ -15525,3 +15525,17 @@ F: sound/soc/amlogic/auge/*
 F: sound/soc/codecs/amlogic/pdm_dummy.c
 F: sound/soc/codecs/amlogic/tlv320adc3101.c
 
+DRM DRIVERS FOR AMLOGIC SOCS
+M:	Neil Armstrong <narmstrong@baylibre.com>
+L:	dri-devel@lists.freedesktop.org
+L:	linux-amlogic@lists.infradead.org
+W:	http://linux-meson.com/
+S:	Supported
+F:	drivers/amlogic/drm/
+F:	Documentation/devicetree/bindings/display/amlogic,meson-vpu.txt
+F:	Documentation/devicetree/bindings/display/amlogic,meson-dw-hdmi.txt
+T:	git git://anongit.freedesktop.org/drm/drm-misc
+
+AMLOGIC MESONGXL ADD P231 DTS
+M:	Lianghu Su <lianghu.su@amlogic.com>
+F:	arch/arm64/boot/dts/amlogic/gxl_p231_2g_buildroot.dts
