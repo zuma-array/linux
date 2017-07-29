@@ -109,5 +109,10 @@ source "drivers/amlogic/irblaster/Kconfig"
 source "drivers/amlogic/iio/Kconfig"
 
 source "drivers/amlogic/ddr_window/Kconfig"
+
+source "drivers/amlogic/drm/Kconfig"
+
+source "drivers/amlogic/secure_monitor/Kconfig"
+
 endmenu
 endif
