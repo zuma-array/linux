@@ -45,7 +45,6 @@ struct snd_soc_am33xx_s800 {
 	int			amp_overcurrent_gpio;
 	struct snd_kcontrol	*amp_overheat_kctl;
 	struct regulator	*regulator;
-	const char		*serial_config; /* I (I2S only), D (DSD only), M (I2S and DSD), S (SPDIF), - (do not use) */
 
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pinctrl_state_pcm, *pinctrl_state_dsd;
@@ -90,85 +89,6 @@ static int am33xx_s800_apply_drift(struct snd_soc_card *card)
 	ret = clk_set_rate(priv->pllclk, clk_rate);
 	if (ret)
 		dev_warn(card->dev, "failed to set PLL rate %d\n", ret);
-
-	return 0;
-}
-
-static int am33xx_s800_setup_mcasp(struct snd_pcm_substream *substream, snd_pcm_format_t format)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	struct snd_soc_card *card = codec_dai->component->card;
-	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
-	const char *serial_config = priv->serial_config;
-
-	int n_i2s = 0;
-	int n_dsd = 0;
-	int n_spdif = 0;
-	int i;
-	int tx_slots[4];
-	int nch = 0;
-	int ret;
-	bool is_dsd = (format == SNDRV_PCM_FORMAT_DSD_U8);
-
-	if (!serial_config) {
-		dev_warn(card->dev, "Serial configuration is empty, skipping reconfiguration\n");
-		return 0;
-	}
-
-	for (i = 0; i < 4; i++) {
-		switch (serial_config[i]) {
-			case 'I':
-				if (is_dsd) continue;
-				n_i2s++;
-				break;
-			case 'D':
-				if (!is_dsd) continue;
-				n_dsd++;
-				break;
-			case 'M':
-				n_i2s++;
-				n_dsd++;
-				break;
-			case 'S':
-				n_spdif++;
-				break;
-			case '-':
-				continue;
-				break;
-			default:
-				dev_warn(card->dev, "Invalid character '%c' in serial config\n", serial_config[i]);
-				return -EINVAL;
-		}
-		tx_slots[nch++] = i;
-	}
-
-	if (n_spdif > 0 && (n_i2s + n_dsd) != 0) {
-		dev_warn(card->dev, "SPDIF is not compatiable with other formats\n");
-		return -EINVAL;
-	}
-
-	if (n_dsd == 0 && is_dsd) {
-		dev_warn(card->dev, "No pins defined for DSD, yet DSD is detected!\n");
-		return -EINVAL;
-	}
-
-	if (is_dsd) {
-		ret = pinctrl_select_state(priv->pinctrl, priv->pinctrl_state_dsd);
-		if (ret < 0)
-			dev_warn(card->dev, "could not select dsd pins\n");
-	} else {
-		ret = pinctrl_select_state(priv->pinctrl, priv->pinctrl_state_pcm);
-		if (ret < 0)
-			dev_warn(card->dev, "could not select pcm pins\n");
-	}
-
-	ret = snd_soc_dai_set_channel_map(cpu_dai, nch, tx_slots, 0, NULL);
-	if (ret < 0) {
-		dev_warn(card->dev, "Failed to reconfigure channel map\n");
-		return ret;
-	}
 
 	return 0;
 }
@@ -355,13 +275,6 @@ static int am33xx_s800_common_hw_params(struct snd_pcm_substream *substream,
 		if (ret < 0) {
 			dev_warn(card->dev, "could not set drift for PLL: %d\n", ret);
 		}
-	}
-
-	/* Reconfigure McASP serializers */
-	ret = am33xx_s800_setup_mcasp(substream, params_format(params));
-	if (ret < 0) {
-		dev_warn(card->dev, "Unsupported mcasp serial config : %d\n", ret);
-		return ret;
 	}
 
 	/* CPU MLCK */
@@ -814,13 +727,6 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 
 		if (ret < 0)
 			priv->cb_reset_gpio = -EINVAL;
-	}
-
-	of_property_read_string(top_node, "sue,serial-config", &priv->serial_config);
-	if (priv->serial_config) {
-		dev_info(dev, "Found serial config %s \n", priv->serial_config);
-	} else {
-		dev_warn(dev, "No serial config\n");
 	}
 
 	ret = snd_soc_register_card(&priv->card);
