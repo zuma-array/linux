@@ -16,6 +16,7 @@
 #include <linux/dmaengine.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
+#include <linux/of_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
@@ -122,6 +123,8 @@ static int fsl_sai_set_dai_tdm_slot(struct snd_soc_dai *cpu_dai, u32 tx_mask,
 				u32 rx_mask, int slots, int slot_width)
 {
 	struct fsl_sai *sai = snd_soc_dai_get_drvdata(cpu_dai);
+
+	dev_info(cpu_dai->dev, "%s slots %d width %d\n", __func__, slots, slot_width);
 
 	sai->slots = slots;
 	sai->slot_width = slot_width;
@@ -339,11 +342,10 @@ void fsl_sai_set_cr4_cr5(struct fsl_sai *sai, bool tx, u32 word_width, u32 slot_
 	regmap_write(sai->regmap, FSL_SAI_xMR(tx), ~0UL - ((1 << channels) - 1));
 }
 
-static int fsl_sai_init_continuous_clock(struct snd_soc_dai *cpu_dai)
+static int fsl_sai_init_continuous_clock(struct snd_soc_dai *cpu_dai, bool tx)
 {
 	struct fsl_sai *sai = snd_soc_dai_get_drvdata(cpu_dai);
 
-	bool tx = true;
 	unsigned int channels = 2;
 	unsigned int rate = 48000;
 	int ret, i;
@@ -360,6 +362,7 @@ static int fsl_sai_init_continuous_clock(struct snd_soc_dai *cpu_dai)
 	if (ret)
 		return ret;
 
+	dev_info(cpu_dai->dev, "called init continous_clock for %s\n", tx ? "tx" : "rx");
 	fsl_sai_set_cr4_cr5(sai, tx, sai->slot_width, sai->slot_width, channels);
 
 
@@ -387,6 +390,64 @@ static int fsl_sai_init_continuous_clock(struct snd_soc_dai *cpu_dai)
 	return 0;
 }
 
+/* This fuction stops the serializer either tx, rx or both directions. */
+static void fsl_sai_stop(struct fsl_sai *sai, bool tx, bool rx)
+{
+	u32 xcsr, count = 100;
+
+	if (tx)
+		regmap_update_bits(sai->regmap, FSL_SAI_TCSR, FSL_SAI_CSR_TERE, 0);
+	if (rx)
+		regmap_update_bits(sai->regmap, FSL_SAI_RCSR, FSL_SAI_CSR_TERE, 0);
+
+	/* TERE will remain set till the end of current frame */
+	do {
+		udelay(10);
+		regmap_read(sai->regmap, FSL_SAI_xCSR(tx), &xcsr);
+	} while (--count && xcsr & FSL_SAI_CSR_TERE);
+
+	/* reset FIFOs */
+	if (tx)
+		regmap_update_bits(sai->regmap, FSL_SAI_TCSR, FSL_SAI_CSR_FR, FSL_SAI_CSR_FR);
+	if (rx)
+		regmap_update_bits(sai->regmap, FSL_SAI_RCSR, FSL_SAI_CSR_FR, FSL_SAI_CSR_FR);
+
+	/* Software Reset for both Tx and Rx */
+	if (tx)
+		regmap_write(sai->regmap, FSL_SAI_TCSR, FSL_SAI_CSR_SR);
+	if (rx)
+		regmap_write(sai->regmap, FSL_SAI_RCSR, FSL_SAI_CSR_SR);
+
+	/* Clear SR bit to finish the reset */
+	if (tx)
+		regmap_write(sai->regmap, FSL_SAI_TCSR, 0);
+	if (rx)
+		regmap_write(sai->regmap, FSL_SAI_RCSR, 0);
+}
+
+static void fsl_sai_start(struct fsl_sai *sai, bool tx)
+{
+	int i;
+	u8 channels = sai->slots;
+
+	regmap_update_bits(sai->regmap, FSL_SAI_xCSR(tx),
+			   FSL_SAI_CSR_FRDE, FSL_SAI_CSR_FRDE);
+
+	if (tx) {
+		for (i = 0; tx && i < channels; i++)
+			regmap_write(sai->regmap, FSL_SAI_TDR, 0x0);
+		udelay(10);
+	}
+
+	regmap_update_bits(sai->regmap, FSL_SAI_RCSR,
+			   FSL_SAI_CSR_TERE, FSL_SAI_CSR_TERE);
+	regmap_update_bits(sai->regmap, FSL_SAI_TCSR,
+			   FSL_SAI_CSR_TERE, FSL_SAI_CSR_TERE);
+
+	regmap_update_bits(sai->regmap, FSL_SAI_xCSR(tx),
+			   FSL_SAI_CSR_xIE_MASK, FSL_SAI_FLAGS);
+}
+
 static int fsl_sai_set_dai_fmt_tr(struct snd_soc_dai *cpu_dai,
 				unsigned int fmt, int fsl_dir)
 {
@@ -399,6 +460,8 @@ static int fsl_sai_set_dai_fmt_tr(struct snd_soc_dai *cpu_dai,
 		val_cr4 |= FSL_SAI_CR4_MF;
 
 	/* DAI mode */
+	sai->is_dsp_mode = false;
+	sai->is_pdm_mode = false;
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_I2S:
 		/*
@@ -439,6 +502,7 @@ static int fsl_sai_set_dai_fmt_tr(struct snd_soc_dai *cpu_dai,
 	case SND_SOC_DAIFMT_PDM:
 		val_cr2 |= FSL_SAI_CR2_BCP;
 		sai->is_dsp_mode = true;
+		sai->is_pdm_mode = true;
 		break;
 	case SND_SOC_DAIFMT_RIGHT_J:
 		/* To be done */
@@ -499,21 +563,25 @@ static int fsl_sai_set_dai_fmt_tr(struct snd_soc_dai *cpu_dai,
 			   FSL_SAI_CR4_MF | FSL_SAI_CR4_FSE |
 			   FSL_SAI_CR4_FSP | FSL_SAI_CR4_FSD_MSTR, val_cr4);
 
-	if (tx) {
-		/*
-		 * We also make sure to call fsl_sai_init_continuos_clock() once, since some
-		 * audio drivers will call set_dai_ftm() on every hw_params() call.
-		 */
-		if (fmt & SND_SOC_DAIFMT_CONT && !sai->continuous_clock_init_done) {
-			sai->continuous_clock = true;
-			ret = fsl_sai_init_continuous_clock(cpu_dai);
-			sai->continuous_clock_init_done = true;
+	sai->continuous_clock = (fmt & SND_SOC_DAIFMT_CONT) ? true : false;
 
-			if (ret < 0) {
-				dev_warn(cpu_dai->dev, "failed to init continuous clock\n");
-			}
-		} else {
-			sai->continuous_clock = false;
+	if (sai->is_slave_mode && sai->continuous_clock) {
+		dev_err(cpu_dai->dev, "continuous clocks are not supported in slave mode\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * We also make sure to call fsl_sai_init_continuos_clock() once, since some
+	 * audio drivers will call set_dai_ftm() on every hw_params() call.
+	 */
+	if (sai->continuous_clock && !sai->continuous_clock_init_done) {
+		/* Enable continuous clock for Tx and Rx */
+		ret = fsl_sai_init_continuous_clock(cpu_dai, true);
+		ret = fsl_sai_init_continuous_clock(cpu_dai, false);
+		sai->continuous_clock_init_done = true;
+
+		if (ret < 0) {
+			dev_warn(cpu_dai->dev, "failed to init continuous clock\n");
 		}
 	}
 
@@ -582,7 +650,7 @@ static int fsl_sai_hw_params(struct snd_pcm_substream *substream,
 			return ret;
 	}
 
-	fsl_sai_set_cr4_cr5(sai, tx, word_width, slot_width, channels);
+	fsl_sai_set_cr4_cr5(sai, tx, word_width, slot_width, sai->slots);
 
 	return 0;
 }
@@ -603,15 +671,12 @@ static int fsl_sai_hw_free(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-
 static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 		struct snd_soc_dai *cpu_dai)
 {
 	struct fsl_sai *sai = snd_soc_dai_get_drvdata(cpu_dai);
 	bool tx = substream->stream == SNDRV_PCM_STREAM_PLAYBACK;
-	u8 channels = substream->runtime->channels;
-	u32 xcsr, count = 100;
-	int i;
+	u32 xcsr;
 
 	/*
 	 * Asynchronous mode: Clear SYNC for both Tx and Rx.
@@ -631,21 +696,29 @@ static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		regmap_update_bits(sai->regmap, FSL_SAI_xCSR(tx),
-				   FSL_SAI_CSR_FRDE, FSL_SAI_CSR_FRDE);
-
-		for (i = 0; tx && i < channels; i++)
-			regmap_write(sai->regmap, FSL_SAI_TDR, 0x0);
-		if (tx)
-			udelay(10);
-
-		regmap_update_bits(sai->regmap, FSL_SAI_RCSR,
-				   FSL_SAI_CSR_TERE, FSL_SAI_CSR_TERE);
-		regmap_update_bits(sai->regmap, FSL_SAI_TCSR,
-				   FSL_SAI_CSR_TERE, FSL_SAI_CSR_TERE);
-
-		regmap_update_bits(sai->regmap, FSL_SAI_xCSR(tx),
-				   FSL_SAI_CSR_xIE_MASK, FSL_SAI_FLAGS);
+		if (tx && sai->is_pdm_mode && sai->is_slave_mode && sai->is_pdm_sync_slave) {
+			/*
+			 * We do nothing here, starting of the playback will be handled by the master SAI
+			 *
+			 * NOTE: what should happen if the master never starts us? Maybe start playback
+			 * delayed by a few milliseconds.
+			 */
+		} else if (tx && sai->is_pdm_mode && sai->pdm_sync_slave) {
+			/*
+			 * We stop our master SAI, this will also stop the clocks, then we start the slave
+			 * SAI where the DMA will not run until we enable the clocks on the master SAI,
+			 * which we do in the last step.
+			 *
+			 * TODO: maybe remove the udelay()
+			 */
+			fsl_sai_stop(sai, tx, !tx);
+			udelay(20);
+			fsl_sai_start(sai->pdm_sync_slave, tx);
+			udelay(20);
+			fsl_sai_start(sai, tx);
+		} else {
+			fsl_sai_start(sai, tx);
+		}
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
@@ -660,29 +733,7 @@ static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 		if (!(xcsr & FSL_SAI_CSR_FRDE)) {
 			if (!sai->continuous_clock) {
 				/* Disable both directions */
-				regmap_update_bits(sai->regmap, FSL_SAI_TCSR,
-						   FSL_SAI_CSR_TERE, 0);
-				regmap_update_bits(sai->regmap, FSL_SAI_RCSR,
-						   FSL_SAI_CSR_TERE, 0);
-
-				/* TERE will remain set till the end of current frame */
-				do {
-					udelay(10);
-					regmap_read(sai->regmap, FSL_SAI_xCSR(tx), &xcsr);
-				} while (--count && xcsr & FSL_SAI_CSR_TERE);
-
-				/* reset FIFOs */
-				regmap_update_bits(sai->regmap, FSL_SAI_TCSR,
-						   FSL_SAI_CSR_FR, FSL_SAI_CSR_FR);
-				regmap_update_bits(sai->regmap, FSL_SAI_RCSR,
-						   FSL_SAI_CSR_FR, FSL_SAI_CSR_FR);
-
-				/* Software Reset for both Tx and Rx */
-				regmap_write(sai->regmap, FSL_SAI_TCSR, FSL_SAI_CSR_SR);
-				regmap_write(sai->regmap, FSL_SAI_RCSR, FSL_SAI_CSR_SR);
-				/* Clear SR bit to finish the reset */
-				regmap_write(sai->regmap, FSL_SAI_TCSR, 0);
-				regmap_write(sai->regmap, FSL_SAI_RCSR, 0);
+				fsl_sai_stop(sai, true, true);
 			}
 		}
 		break;
@@ -726,8 +777,27 @@ static int fsl_sai_startup(struct snd_pcm_substream *substream,
 static void fsl_sai_shutdown(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *cpu_dai)
 {
+	int ret;
 	struct fsl_sai *sai = snd_soc_dai_get_drvdata(cpu_dai);
 	bool tx = substream->stream == SNDRV_PCM_STREAM_PLAYBACK;
+
+	/*
+	 * There seems to be a hardware issue that when we go from DSD128 to PCM 192 kHz
+	 * there will be no word clock. For this reason we need to a reset when we
+	 * stop the playback of DSD audio. After the stop/reset we re-enable the continous
+	 * clocks.
+	 */
+	if (tx && sai->is_pdm_mode && sai->continuous_clock) {
+		/* Stop Tx only */
+		fsl_sai_stop(sai, true, false);
+		udelay(20);
+
+		/* Restart continous clocks for Tx only */
+		ret = fsl_sai_init_continuous_clock(cpu_dai, true);
+		if (ret < 0) {
+			dev_warn(cpu_dai->dev, "failed to re-init continuous clock\n");
+		}
+	}
 
 	if (sai->is_stream_opened[tx]) {
 		regmap_update_bits(sai->regmap, FSL_SAI_xCR3(tx), FSL_SAI_CR3_TRCE, 0);
@@ -905,6 +975,7 @@ static int fsl_sai_probe(struct platform_device *pdev)
 	char tmp[8];
 	int irq, ret, i;
 	u32 buffer_size;
+	struct device_node *pdm_slave_node;
 
 	sai = devm_kzalloc(&pdev->dev, sizeof(*sai), GFP_KERNEL);
 	if (!sai)
@@ -914,6 +985,30 @@ static int fsl_sai_probe(struct platform_device *pdev)
 
 	if (of_device_is_compatible(pdev->dev.of_node, "fsl,imx6sx-sai"))
 		sai->sai_on_imx = true;
+
+	if (of_get_property(np, "sue,is-pdm-sync-slave", NULL))
+		sai->is_pdm_sync_slave = true;
+	else
+		sai->is_pdm_sync_slave = false;
+
+	pdm_slave_node = of_parse_phandle(pdev->dev.of_node, "sue,pdm-sync-slave", 0);
+	if (pdm_slave_node != NULL) {
+		struct platform_device *pdm_slave_pdev = of_find_device_by_node(pdm_slave_node);
+		of_node_put(pdm_slave_node);
+
+		sai->pdm_sync_slave = platform_get_drvdata(pdm_slave_pdev);
+
+		if (sai->pdm_sync_slave == NULL) {
+			dev_info(&pdev->dev, "failed to get pdm sync slave, deferring\n");
+			return -EPROBE_DEFER;
+		}
+	}
+
+	if (sai->pdm_sync_slave && sai->is_pdm_sync_slave) {
+		dev_err(&pdev->dev, "can not be sync slave and sync master at the same time\n");
+		return -EINVAL;
+	}
+
 
 	sai->is_lsb_first = of_property_read_bool(np, "lsb-first");
 

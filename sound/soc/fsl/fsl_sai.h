@@ -139,6 +139,7 @@ struct fsl_sai {
 	bool is_slave_mode;
 	bool is_lsb_first;
 	bool is_dsp_mode;
+	bool is_pdm_mode;
 	bool sai_on_imx;
 	bool synchronous[2];
 	bool is_stream_opened[2];
@@ -154,6 +155,9 @@ struct fsl_sai {
 
 	bool continuous_clock;
 	bool continuous_clock_init_done;
+
+	bool is_pdm_sync_slave;
+	struct fsl_sai *pdm_sync_slave;
 };
 
 #define TX 1

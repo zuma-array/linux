@@ -48,6 +48,20 @@ Required properties:
 			  receive data by following their own bit clocks and
 			  frame sync clocks separately.
 
+Optional properties:
+
+  - sue,pdm-sync-slave: When this is contains a reference to another sai node
+			a synchronization mechanism will be used to synchronize
+			the output of the references SAI with this one. It is
+			important the the other SAI is configured as a clock
+			slave and the clocks must come from this SAI. In
+			addition to that, you need to open and start the slave
+			SAI before the master SAI.
+
+  - sue,is-pdm-sync-slave: This specifies that the SAI is a sync slave, thus it
+			   will not start the serializer on it's own but instead
+			   it will be started by the master SAI.
+
 Note:
 - If both fsl,sai-asynchronous and fsl,sai-synchronous-rx are absent, the
   default synchronous mode (sync Rx with Tx) will be used, which means both
