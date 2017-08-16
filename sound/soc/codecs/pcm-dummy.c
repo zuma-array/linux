@@ -84,7 +84,7 @@ struct snd_soc_dai_driver pcm_dummy_dai = {
 	.name = "Dummy PCM Codec",
 	.playback = {
 		.stream_name	= "Playback",
-		.channels_min	= 2,
+		.channels_min	= 1,
 		.channels_max	= 32,
 		.rates		= SNDRV_PCM_RATE_CONTINUOUS,
 		.rate_min	= 5512,
@@ -93,7 +93,7 @@ struct snd_soc_dai_driver pcm_dummy_dai = {
 	},
 	.capture = {
 		.stream_name	= "Capture",
-		.channels_min	= 2,
+		.channels_min	= 1,
 		.channels_max	= 32,
 		.rates		= SNDRV_PCM_RATE_CONTINUOUS,
 		.rate_min	= 5512,
@@ -101,7 +101,7 @@ struct snd_soc_dai_driver pcm_dummy_dai = {
 		.formats	= PCM_DUMMY_FORMATS,
 	},
 	.ops = &pcm_dummy_dai_ops,
-	.symmetric_rates = 1,
+	.symmetric_rates = 0,
 };
 
 #ifdef CONFIG_OF
