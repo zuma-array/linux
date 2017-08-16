@@ -45,12 +45,15 @@
 			    SNDRV_PCM_RATE_3072000)
 
 /* ES9018 registers */
+#define ES9018_INPUT_CONF	1
 #define ES9018_SOFT_VOL3	6
 #define ES9018_GENERAL		7
+#define ES9018_GPIO		8
 #define ES9018_CHANNELMAP	11
 #define ES9018_DPLL_BW		12
 #define ES9018_VOL1_LEFT 	15
 #define ES9018_VOL2_RIGHT	16
+#define ES9018_GPIO_INPUT_SEL	21
 #define ES9018_CHIP_STATUS	64
 /* ES9018_SOFT_VOL3 Masks */
 #define ES9018_SOFT_VOL3_VOL_RATE 7
@@ -61,6 +64,25 @@
 
 #define ES9018_CHIP_ID		0x30 /* Includes a left shift for
 				      * position in register [4:2]. */
+
+#define ES9018_GPIO1_MASK	0x0F
+#define ES9018_GPIO1_INPUT	8
+#define ES9018_GPIO1_INPUT_SEL	9
+
+#define ES9018_GPIO2_MASK	(ES9018_GPIO1_MASK << 4)
+#define ES9018_GPIO2_INPUT	(ES9018_GPIO1_INPUT << 4)
+#define ES9018_GPIO2_INPUT_SEL	(ES9018_GPIO1_INPUT_SEL << 4)
+
+#define ES9018_GPIO_INPUT_SEL_HIGH_MASK (3 << 6)
+#define ES9018_GPIO_INPUT_SEL_HIGH_I2S	(0 << 6)
+#define ES9018_GPIO_INPUT_SEL_HIGH_DSD	(3 << 6)
+
+#define ES9018_GPIO_INPUT_SEL_LOW_MASK	(3 << 4)
+#define ES9018_GPIO_INPUT_SEL_LOW_I2S	(0 << 4)
+#define ES9018_GPIO_INPUT_SEL_LOW_DSD	(3 << 4)
+
+#define ES9018_INPUT_CONF_AUTO_SEL_MASK (3 << 2)
+#define ES9018_INPUT_CONF_AUTO_SEL_NONE (0 << 2)
 
 struct es9018_private {
 	struct regmap	*regmap;
@@ -141,6 +163,23 @@ static int es9018_probe(struct snd_soc_codec *codec)
 	 * is 2. */
 	snd_soc_update_bits(codec, ES9018_SOFT_VOL3,
 			    ES9018_SOFT_VOL3_VOL_RATE, 7);
+
+	/*
+	 * Set GPIO2 to be a GPIO input and GPIO1 to be an input select.
+	 */
+	snd_soc_write(codec, ES9018_GPIO, ES9018_GPIO2_INPUT | ES9018_GPIO1_INPUT_SEL);
+
+	/*
+	 * Configure input select to be DSD when low and PCM when high.
+	 */
+	snd_soc_write(codec, ES9018_GPIO_INPUT_SEL, ES9018_GPIO_INPUT_SEL_HIGH_I2S | ES9018_GPIO_INPUT_SEL_LOW_DSD);
+
+	/*
+	 * Disable automatic input detection and use input select, which is the GPIO
+	 */
+	snd_soc_update_bits(codec, ES9018_INPUT_CONF, ES9018_INPUT_CONF_AUTO_SEL_MASK, ES9018_INPUT_CONF_AUTO_SEL_NONE);
+
+
 	return 0;
 }
 
@@ -169,22 +208,29 @@ static const struct i2c_device_id es9018_i2c_id[] = {
 MODULE_DEVICE_TABLE(i2c, es9018_i2c_id);
 
 static const struct regmap_range es9018_read_registers_range[] = {
-	regmap_reg_range(ES9018_SOFT_VOL3, ES9018_GENERAL),
+	regmap_reg_range(ES9018_INPUT_CONF, ES9018_INPUT_CONF),
+	regmap_reg_range(ES9018_SOFT_VOL3, ES9018_GPIO),
 	regmap_reg_range(ES9018_VOL1_LEFT, ES9018_VOL2_RIGHT),
 	regmap_reg_range(ES9018_CHANNELMAP, ES9018_DPLL_BW),
+	regmap_reg_range(ES9018_GPIO_INPUT_SEL, ES9018_GPIO_INPUT_SEL),
 	regmap_reg_range(ES9018_CHIP_STATUS, ES9018_CHIP_STATUS),
 };
 
 static const struct regmap_range es9018_write_registers_range[] = {
-	regmap_reg_range(ES9018_SOFT_VOL3, ES9018_GENERAL),
+	regmap_reg_range(ES9018_INPUT_CONF, ES9018_INPUT_CONF),
+	regmap_reg_range(ES9018_SOFT_VOL3, ES9018_GPIO),
 	regmap_reg_range(ES9018_VOL1_LEFT, ES9018_VOL2_RIGHT),
 	regmap_reg_range(ES9018_CHANNELMAP, ES9018_DPLL_BW),
+	regmap_reg_range(ES9018_GPIO_INPUT_SEL, ES9018_GPIO_INPUT_SEL),
 };
 
 static const struct reg_default es9018_reg_defaults[] = {
+	{ ES9018_INPUT_CONF	, 0x8C },
 	{ ES9018_SOFT_VOL3	, 0x4A },
 	{ ES9018_GENERAL	, 0x80 },
+	{ ES9018_GPIO		, 0x10 },
 	{ ES9018_CHANNELMAP	, 0x02 },
+	{ ES9018_GPIO_INPUT_SEL	, 0x00 },
 	{ ES9018_VOL1_LEFT	, 0x00 },
 	{ ES9018_VOL2_RIGHT	, 0x00 },
 	{ ES9018_DPLL_BW	, 0x5C },
