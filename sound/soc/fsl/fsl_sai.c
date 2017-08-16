@@ -30,17 +30,6 @@
 #define FSL_SAI_FLAGS (FSL_SAI_CSR_SEIE |\
 		       FSL_SAI_CSR_FEIE)
 
-static u32 fsl_sai_rates[] = {
-	8000, 11025, 12000, 16000, 22050,
-	24000, 32000, 44100, 48000, 64000,
-	88200, 96000, 176400, 192000
-};
-
-static struct snd_pcm_hw_constraint_list fsl_sai_rate_constraints = {
-	.count = ARRAY_SIZE(fsl_sai_rates),
-	.list = fsl_sai_rates,
-};
-
 static irqreturn_t fsl_sai_isr(int irq, void *devid)
 {
 	struct fsl_sai *sai = (struct fsl_sai *)devid;
@@ -731,9 +720,6 @@ static int fsl_sai_startup(struct snd_pcm_substream *substream,
 	regmap_update_bits(sai->regmap, FSL_SAI_xCR3(tx), FSL_SAI_CR3_TRCE,
 			   FSL_SAI_CR3_TRCE);
 
-	ret = snd_pcm_hw_constraint_list(substream->runtime, 0,
-			SNDRV_PCM_HW_PARAM_RATE, &fsl_sai_rate_constraints);
-
 	return ret;
 }
 
@@ -796,7 +782,7 @@ static struct snd_soc_dai_driver fsl_sai_dai = {
 		.channels_min = 1,
 		.channels_max = 32,
 		.rate_min = 8000,
-		.rate_max = 192000,
+		.rate_max = 768000,
 		.rates = SNDRV_PCM_RATE_KNOT,
 		.formats = FSL_SAI_FORMATS,
 	},
@@ -805,7 +791,7 @@ static struct snd_soc_dai_driver fsl_sai_dai = {
 		.channels_min = 1,
 		.channels_max = 32,
 		.rate_min = 8000,
-		.rate_max = 192000,
+		.rate_max = 768000,
 		.rates = SNDRV_PCM_RATE_KNOT,
 		.formats = FSL_SAI_FORMATS,
 	},
