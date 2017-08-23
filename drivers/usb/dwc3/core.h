@@ -36,6 +36,9 @@
 #include <linux/ulpi/interface.h>
 
 #include <linux/phy/phy.h>
+#ifdef CONFIG_AMLOGIC_USB
+#include <linux/clk.h>
+#endif
 
 #define DWC3_MSG_MAX	500
 
@@ -1038,6 +1041,9 @@ struct dwc3 {
 	unsigned		dis_metastability_quirk:1;
 
 	u16			imod_interval;
+#ifdef CONFIG_AMLOGIC_USB
+	struct clk		*general_clk;
+#endif
 };
 
 #define work_to_dwc(w)		(container_of((w), struct dwc3, drd_work))
