@@ -29,6 +29,8 @@
 
 		sue,early-mclk;
 
+		sue,adc-pdn-gpio = <&gpio1 8 0>;
+
 		links {
 			sai1_link: link@0 {
 				sue,name = "analog1";
