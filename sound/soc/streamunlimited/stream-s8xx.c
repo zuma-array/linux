@@ -40,7 +40,7 @@ struct snd_soc_am33xx_s800 {
 	unsigned int		mclk_rate;
 	unsigned int		mclk_rate_rx;
 	s32			drift;
-	int			passive_mode_gpio;
+	int			adc_pdn_gpio;
 	int			cb_reset_gpio;
 	int			amp_overheat_gpio;
 	int			amp_overcurrent_gpio;
@@ -561,32 +561,31 @@ static const struct snd_kcontrol_new am33xx_s800_controls[] = {
 	},
 };
 
-static int am33xx_s800_passive_mode_get(struct snd_kcontrol *kcontrol,
-					struct snd_ctl_elem_value *ucontrol)
+static int s8xx_adc_pdn_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_card *card = snd_kcontrol_chip(kcontrol);
 	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
 
 	ucontrol->value.integer.value[0] =
-		!gpio_get_value_cansleep(priv->passive_mode_gpio);
+		!gpio_get_value_cansleep(priv->adc_pdn_gpio);
 	return 0;
 }
 
-static int am33xx_s800_passive_mode_put(struct snd_kcontrol *kcontrol,
+static int s8xx_adc_pdn_put(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_card *card = snd_kcontrol_chip(kcontrol);
 	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
 
-	gpio_set_value(priv->passive_mode_gpio,
+	gpio_set_value(priv->adc_pdn_gpio,
 		       !ucontrol->value.integer.value[0]);
         return 1;
 }
 
-static const struct snd_kcontrol_new am33xx_s800_passive_mode_control =
-	SOC_SINGLE_BOOL_EXT("Passive mode", 0,
-			    am33xx_s800_passive_mode_get,
-			    am33xx_s800_passive_mode_put);
+static const struct snd_kcontrol_new s8xx_adc_pdn_control =
+	SOC_SINGLE_BOOL_EXT("ADC power down", 0,
+			    s8xx_adc_pdn_get,
+			    s8xx_adc_pdn_put);
 
 static int am33xx_s800_amp_overheat_get(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
@@ -842,22 +841,22 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 		}
 	}
 
-	priv->passive_mode_gpio = of_get_named_gpio(top_node, "sue,passive-mode-gpio", 0);
-	if (gpio_is_valid(priv->passive_mode_gpio)) {
-		ret = devm_gpio_request_one(dev, priv->passive_mode_gpio,
+	priv->adc_pdn_gpio = of_get_named_gpio(top_node, "sue,adc-pdn-gpio", 0);
+	if (gpio_is_valid(priv->adc_pdn_gpio)) {
+		ret = devm_gpio_request_one(dev, priv->adc_pdn_gpio,
 					    GPIOF_OUT_INIT_HIGH,
-					    "Audio Passive Mode");
+					    "ADC power down");
 
 		if (ret == 0) {
 			struct snd_kcontrol *kc =
-				snd_ctl_new1(&am33xx_s800_passive_mode_control, priv);
+				snd_ctl_new1(&s8xx_adc_pdn_control, priv);
 			ret = snd_ctl_add(priv->card.snd_card, kc);
 			if (ret < 0)
-				dev_warn(dev, "Failed to add passive mode control: %d\n", ret);
+				dev_warn(dev, "Failed to add ADC power down control: %d\n", ret);
 		}
 
 		if (ret < 0)
-			priv->passive_mode_gpio = -EINVAL;
+			priv->adc_pdn_gpio = -EINVAL;
 	}
 
 	priv->amp_overheat_gpio = of_get_named_gpio(top_node, "sue,amp-overheat-gpio", 0);
