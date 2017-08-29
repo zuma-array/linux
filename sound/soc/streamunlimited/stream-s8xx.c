@@ -40,7 +40,6 @@ struct snd_soc_am33xx_s800 {
 	unsigned int		mclk_rate;
 	unsigned int		mclk_rate_rx;
 	s32			drift;
-	int			adc_pdn_gpio;
 	int			cb_reset_gpio;
 	int			amp_overheat_gpio;
 	int			amp_overcurrent_gpio;
@@ -56,6 +55,12 @@ struct snd_soc_am33xx_s800 {
 	u32 nominal_pll_rate;
 
 	bool early_mclk;
+
+	/*
+	 * NOTE: on the imx7 platform gpio_get_value() does not work if the GPIO is configured
+	 * as an output. So we must keep the state of the GPIO in a separate variable.
+	 */
+	int adc_pdn_gpio, adc_pdn_status;
 };
 
 /*
@@ -566,8 +571,7 @@ static int s8xx_adc_pdn_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_v
 	struct snd_soc_card *card = snd_kcontrol_chip(kcontrol);
 	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
 
-	ucontrol->value.integer.value[0] =
-		!gpio_get_value_cansleep(priv->adc_pdn_gpio);
+	ucontrol->value.integer.value[0] = !priv->adc_pdn_status;
 	return 0;
 }
 
@@ -577,8 +581,8 @@ static int s8xx_adc_pdn_put(struct snd_kcontrol *kcontrol,
 	struct snd_soc_card *card = snd_kcontrol_chip(kcontrol);
 	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
 
-	gpio_set_value(priv->adc_pdn_gpio,
-		       !ucontrol->value.integer.value[0]);
+	priv->adc_pdn_status = !ucontrol->value.integer.value[0];
+	gpio_set_value(priv->adc_pdn_gpio, priv->adc_pdn_status);
         return 1;
 }
 
@@ -846,6 +850,8 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 		ret = devm_gpio_request_one(dev, priv->adc_pdn_gpio,
 					    GPIOF_OUT_INIT_HIGH,
 					    "ADC power down");
+
+		priv->adc_pdn_status = 1;
 
 		if (ret == 0) {
 			struct snd_kcontrol *kc =
