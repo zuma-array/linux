@@ -54,6 +54,9 @@
 #include <linux/reset.h>
 #include <linux/of_mdio.h>
 #include "dwmac1000.h"
+#ifdef CONFIG_DWMAC_MESON
+#include <phy_debug.h>
+#endif
 
 #define	STMMAC_ALIGN(x)		ALIGN(ALIGN(x, SMP_CACHE_BYTES), 16)
 #define	TSO_MAX_BUFF_SIZE	(SZ_16K - 1)
@@ -3426,6 +3429,10 @@ int stmmac_dvr_probe(struct device *device,
 		goto error_netdev_register;
 	}
 
+#ifdef CONFIG_DWMAC_MESON
+	ret = gmac_create_sysfs(
+		mdiobus_get_phy(priv->mii, priv->plat->phy_addr), priv->ioaddr);
+#endif
 	return ret;
 
 error_netdev_register:
@@ -3461,6 +3468,10 @@ int stmmac_dvr_remove(struct device *dev)
 
 	priv->hw->dma->stop_rx(priv->ioaddr);
 	priv->hw->dma->stop_tx(priv->ioaddr);
+
+#ifdef CONFIG_DWMAC_MESON
+	gmac_remove_sysfs(priv->phydev);
+#endif
 
 	stmmac_set_mac(priv->ioaddr, false);
 	netif_carrier_off(ndev);
