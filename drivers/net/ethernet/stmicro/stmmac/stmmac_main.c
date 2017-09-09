@@ -3576,7 +3576,9 @@ int stmmac_resume(struct device *dev)
 			stmmac_mdio_reset(priv->mii);
 	}
 
+#ifndef CONFIG_AMLOGIC_ETH_PRIVE
 	netif_device_attach(ndev);
+#endif
 
 	spin_lock_irqsave(&priv->lock, flags);
 
@@ -3598,6 +3600,9 @@ int stmmac_resume(struct device *dev)
 	stmmac_init_tx_coalesce(priv);
 	stmmac_set_rx_mode(ndev);
 
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+	netif_device_attach(ndev);
+#endif
 	napi_enable(&priv->napi);
 
 	netif_start_queue(ndev);
