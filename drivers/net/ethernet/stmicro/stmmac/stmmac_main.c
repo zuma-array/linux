@@ -4519,7 +4519,9 @@ int stmmac_resume(struct device *dev)
 			stmmac_mdio_reset(priv->mii);
 	}
 
+#ifndef CONFIG_AMLOGIC_ETH_PRIVE
 	netif_device_attach(ndev);
+#endif
 
 	mutex_lock(&priv->lock);
 
@@ -4540,6 +4542,9 @@ int stmmac_resume(struct device *dev)
 	stmmac_init_tx_coalesce(priv);
 	stmmac_set_rx_mode(ndev);
 
+#ifdef CONFIG_AMLOGIC_ETH_PRIVE
+	netif_device_attach(ndev);
+#endif
 	stmmac_enable_all_queues(priv);
 
 	stmmac_start_all_queues(priv);
