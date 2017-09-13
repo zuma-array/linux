@@ -874,6 +874,8 @@
  *	This will contain a %NL80211_ATTR_NAN_MATCH nested attribute and
  *	%NL80211_ATTR_COOKIE.
  *
+ * @NL80211_CMD_RELOAD_REGDB: Request that the regdb firmware file is reloaded.
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -1068,6 +1070,8 @@ enum nl80211_commands {
 	NL80211_CMD_DEL_NAN_FUNCTION,
 	NL80211_CMD_CHANGE_NAN_CONFIG,
 	NL80211_CMD_NAN_MATCH,
+
+	NL80211_CMD_RELOAD_REGDB,
 
 	/* add new commands above here */
 

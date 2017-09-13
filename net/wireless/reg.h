@@ -143,4 +143,9 @@ int cfg80211_get_unii(int freq);
  */
 bool regulatory_indoor_allowed(void);
 
+/**
+ * reg_reload_regdb - reload the regulatory.db firmware file
+ */
+int reg_reload_regdb(void);
+
 #endif  /* __NET_WIRELESS_REG_H */
