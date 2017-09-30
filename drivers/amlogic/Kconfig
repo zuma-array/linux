@@ -122,5 +122,6 @@ source "drivers/amlogic/tee/Kconfig"
 
 source "drivers/amlogic/ledring/Kconfig"
 
+source "drivers/amlogic/irqchip/Kconfig"
 endmenu
 endif

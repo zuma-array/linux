@@ -112,3 +112,5 @@ obj-$(CONFIG_AMLOGIC_M8B_SM) += secure_monitor/
 obj-$(CONFIG_AMLOGIC_TEE) += tee/
 
 obj-$(CONFIG_AMLOGIC_LEDRING) += ledring/
+
+obj-$(CONFIG_AMLOGIC_GPIO_IRQ) += irqchip/
