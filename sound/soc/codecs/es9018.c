@@ -25,6 +25,7 @@
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
 #include <sound/soc.h>
+#include <sound/pcm_params.h>
 
 #define ES9018_PCM_FORMATS (SNDRV_PCM_FMTBIT_S16_LE |	\
 			    SNDRV_PCM_FMTBIT_S24_LE |	\
@@ -84,6 +85,9 @@
 #define ES9018_INPUT_CONF_AUTO_SEL_MASK (3 << 2)
 #define ES9018_INPUT_CONF_AUTO_SEL_NONE (0 << 2)
 
+#define ES9018_DPLL_BW_DSD_MASK (0x0F)
+#define ES9018_DPLL_BW_I2S_MASK (0xF0)
+
 struct es9018_private {
 	struct regmap	*regmap;
 	unsigned int	format;
@@ -96,6 +100,51 @@ static int es9018_digital_mute(struct snd_soc_dai *dai, int mute)
 	return snd_soc_update_bits(dai->codec, ES9018_GENERAL,
 				   ES9018_SOFT_MUTE_MASK,
 				   mute ? ES9018_SOFT_MUTE_MASK : 0);
+}
+
+#define HBW_BCLK_RATE	(2822400UL)
+
+static bool is_dsd(snd_pcm_format_t fmt)
+{
+	switch (fmt) {
+		case SNDRV_PCM_FORMAT_DSD_U8:
+		case SNDRV_PCM_FORMAT_DSD_U16_LE:
+		case SNDRV_PCM_FORMAT_DSD_U16_BE:
+		case SNDRV_PCM_FORMAT_DSD_U32_LE:
+		case SNDRV_PCM_FORMAT_DSD_U32_BE:
+			return true;
+
+		default:
+			return false;
+	}
+}
+
+static int es9018_hw_params(struct snd_pcm_substream *substream,
+			    struct snd_pcm_hw_params *params,
+			    struct snd_soc_dai *dai)
+{
+	struct snd_soc_codec *codec = dai->codec;
+	snd_pcm_format_t fmt = params_format(params);
+	u32 rate = params_rate(params);
+	u32 bclk_rate = rate * snd_pcm_format_physical_width(fmt);
+
+	if (is_dsd(fmt)) {
+		/*
+		 * For DSD64 keep the DSD DPLL bandwidth at the default value of 0x0A,
+		 * for higher speeds set the bandwidth to a value of 0x0C.
+		 */
+		u32 bw_val = (bclk_rate <= HBW_BCLK_RATE) ? 0x0A : 0x0C;
+		snd_soc_update_bits(codec, ES9018_DPLL_BW, ES9018_DPLL_BW_DSD_MASK, bw_val);
+	} else {
+		/*
+		 * For BCLK below ~2.8 MHz we keep the DPLL bandwidth at the default value of 0x50,
+		 * for higher speeds set the bandwidth to a value of 0xF0.
+		 */
+		u32 bw_val = (bclk_rate <= HBW_BCLK_RATE) ? 0x50 : 0xF0;
+		snd_soc_update_bits(codec, ES9018_DPLL_BW, ES9018_DPLL_BW_I2S_MASK, bw_val);
+	}
+
+	return 0;
 }
 
 static const char * const es9018_pcm_rolloff_filter_txt[] = {
@@ -119,29 +168,18 @@ static SOC_ENUM_DOUBLE_DECL(es9018_analog_polarity,
 			    ES9018_CHANNELMAP, 2, 3,
 			    es9018_analog_polarity_txt);
 
-static const char * const es9018_dpll_bw_txt[] = {
-	"normal", "wide"
-};
-static const unsigned int es9018_dpll_bw_values[] = {
-	0x5C, 0xFC
-};
-static SOC_VALUE_ENUM_SINGLE_DECL(es9018_dpll_bw_i2s,
-				  ES9018_DPLL_BW, 0, 0xFF,
-				  es9018_dpll_bw_txt,
-				  es9018_dpll_bw_values);
-
 static const struct snd_kcontrol_new es9018_controls[] = {
 	SOC_DOUBLE_R("Master Playback Volume", ES9018_VOL1_LEFT,
 		     ES9018_VOL2_RIGHT, 0, 0xff, 1),
 	SOC_DOUBLE("Master Playback Switch", ES9018_GENERAL, 0, 1, 1, 1),
 	SOC_ENUM("PCM Rolloff filter", es9018_pcm_rolloff_filter),
 	SOC_ENUM("DSD Rolloff filter", es9018_dsd_rolloff_filter),
-	SOC_ENUM("DPLL I2S Bandwidth", es9018_dpll_bw_i2s),
 	SOC_ENUM("Audio Polarity", es9018_analog_polarity),
 };
 
 static const struct snd_soc_dai_ops es9018_dai_ops = {
 	.digital_mute	= es9018_digital_mute,
+	.hw_params	= es9018_hw_params,
 };
 
 static struct snd_soc_dai_driver es9018_dai = {
@@ -233,7 +271,7 @@ static const struct reg_default es9018_reg_defaults[] = {
 	{ ES9018_GPIO_INPUT_SEL	, 0x00 },
 	{ ES9018_VOL1_LEFT	, 0x00 },
 	{ ES9018_VOL2_RIGHT	, 0x00 },
-	{ ES9018_DPLL_BW	, 0x5C },
+	{ ES9018_DPLL_BW	, 0x5A },
 };
 
 static const struct regmap_access_table es9018_read_registers = {
