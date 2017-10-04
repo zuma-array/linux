@@ -549,7 +549,7 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 {
 	int ret;
 	struct device *dev = &pdev->dev;
-	struct device_node *top_node, *node;
+	struct device_node *top_node, *node, *subcomponents_node;
 	struct snd_soc_am33xx_s800 *priv;
 	struct snd_soc_dai_link *link;
         const struct of_device_id *of_id =
@@ -634,7 +634,9 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 		dev_warn(&pdev->dev, "failed to parse audio-routing: %d\n", ret);
 	}
 
+	/* do we have links array? */
 	node = of_get_child_by_name(top_node, "links");
+
 	if (node) {
 		struct device_node *child;
 
@@ -645,20 +647,24 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 			return -EINVAL;
 		}
 
+		/* allocate dai link */
 		priv->card.dai_link =
 			devm_kzalloc(dev, priv->card.num_links * sizeof(*link),
 				     GFP_KERNEL);
 		if (!priv->card.dai_link)
 			return -ENOMEM;
 
+		/* get pointer to the dai link */
 		link = priv->card.dai_link;
 
 		/*
 		 * TODO: use helper function: snd_soc_of_parse_daifmt()
 		 */
+		/* parse all device tree link nodes */
 		for_each_child_of_node(node, child) {
 			unsigned int dai_fmt_link = 0;
 
+			/* platform and cpu-dai-name is always processed, even when we use hardcoded dai links */
 			link->platform_of_node = of_parse_phandle(child, "sue,platform", 0);
 			link->codec_of_node = of_parse_phandle(child, "sue,codec", 0);
 
@@ -670,6 +676,47 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 						&link->cpu_dai_name);
 			of_property_read_string(child, "sue,codec-dai-name",
 						&link->codec_dai_name);
+
+			/* do we have subcomponents? */
+			subcomponents_node = of_get_child_by_name(child, "sue,dai-links");
+
+			/* if we do, parse them */
+			if (subcomponents_node) {
+				struct device_node *subcomponent_child;
+				struct snd_soc_dai_link_component *component;
+
+				/* get the number of components */
+				link->num_codecs = of_get_child_count(subcomponents_node);
+				dev_notice(&pdev->dev, "found %d subcodecs\n", link->num_codecs);
+
+				/* if it is non-zero value */
+				if (link->num_codecs != 0) {
+					/* allocate components */
+					link->codecs = devm_kzalloc(dev, link->num_codecs * sizeof(*component), GFP_KERNEL);
+
+					if (!link->codecs) {
+						of_node_put(subcomponents_node);
+						return -ENOMEM;
+					}
+
+					/* parse all components */
+					component = link->codecs;
+					for_each_child_of_node(subcomponents_node, subcomponent_child) {
+						/* get reference to the codec object*/
+						component->of_node = of_parse_phandle(subcomponent_child, "sue,codec", 0);
+
+						/* read codec name */
+						of_property_read_string(subcomponent_child, "sue,codec-name", &component->name);
+
+						/* read dai name */
+						of_property_read_string(subcomponent_child, "sue,codec-dai-name", &component->dai_name);
+
+						/* jump to the next component */
+						component++;
+					}
+				}
+				of_node_put(subcomponents_node);
+			}
 
 			if (of_get_property(child, "sue,codec-is-bfclk-master", NULL))
 				dai_fmt_link |= SND_SOC_DAIFMT_CBM_CFM;
