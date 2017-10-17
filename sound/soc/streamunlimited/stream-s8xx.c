@@ -55,6 +55,12 @@ struct snd_soc_am33xx_s800 {
 
 	bool early_mclk;
 
+	struct gpio_desc	*pcmndsd;
+	struct gpio_desc	*mute;
+	struct gpio_desc	*hdplus;
+
+	bool is_pdm_mode;
+
 	/*
 	 * NOTE: on the imx7 platform gpio_get_value() does not work if the GPIO is configured
 	 * as an output. So we must keep the state of the GPIO in a separate variable.
@@ -244,9 +250,42 @@ static int am33xx_s800_common_hw_params(struct snd_pcm_substream *substream,
 #endif /* CONFIG_SND_SOC_STREAM_AM33XX */
 	int ret;
 	int clk_id, div_mclk, div_bclk, div_lrclk;
+	int dai_fmt = rtd->dai_link->dai_fmt;
+	bool is_dsd = (params_format(params) == SNDRV_PCM_FORMAT_DSD_U8);
 
 	rate = params_rate(params);
 	mclk = rate_to_mclk(rate);
+
+
+	dai_fmt &= ~SND_SOC_DAIFMT_FORMAT_MASK;
+	if (is_dsd) {
+		if (params_channels(params) != 1) {
+			dev_err(card->dev, "Only 1 channel is supported for DSD playback\n");
+			return -EINVAL;
+		}
+
+		dai_fmt |= SND_SOC_DAIFMT_PDM;
+		priv->is_pdm_mode = true;
+		gpiod_set_value(priv->pcmndsd, 0);
+		bclk = rate * 8;
+		dev_info(card->dev, "Format is DSD\n");
+	} else {
+		if (params_channels(params) == 1) {
+			dev_err(card->dev, "1 channel is not supported for PCM playback\n");
+			return -EINVAL;
+		}
+
+		dai_fmt |= (is_tdm ? SND_SOC_DAIFMT_DSP_B : SND_SOC_DAIFMT_I2S);
+		priv->is_pdm_mode = false;
+		gpiod_set_value(priv->pcmndsd, 1);
+		bclk = rate * 2 * DATA_WORD_WIDTH;
+		dev_info(card->dev, "Format is PCM\n");
+	}
+
+	if (is_dsd || rate > 192000)
+		gpiod_set_value(priv->hdplus, 1);
+	else
+		gpiod_set_value(priv->hdplus, 0);
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		clk_id = 0;
@@ -262,7 +301,7 @@ static int am33xx_s800_common_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	/* if the codec is MCLK master then do not configure our MCLK source */
-	if ((rtd->dai_link->dai_fmt & SND_SOC_DAIFMT_CMM) == 0) {
+	if ((dai_fmt & SND_SOC_DAIFMT_CMM) == 0) {
 		ret = am33xx_s800_set_mclk(priv, rate, substream->stream);
 		if (ret < 0) {
 			dev_warn(card->dev, "failed to set MCLK: %d\n", ret);
@@ -289,12 +328,6 @@ static int am33xx_s800_common_hw_params(struct snd_pcm_substream *substream,
 	if (ret < 0) {
 		dev_warn(card->dev, "Unsupported codec dai MLCK : %d\n", ret);
 		/* intentionally ignore errors - the codec driver may not care, at least give a warning */
-	}
-
-	if (params_format(params) == SNDRV_PCM_FORMAT_DSD_U8) {
-		bclk = rate * 8;
-	} else {
-		bclk = rate * 2 * DATA_WORD_WIDTH;
 	}
 
 
@@ -334,12 +367,26 @@ static int am33xx_s800_common_hw_params(struct snd_pcm_substream *substream,
 
 	if (is_tdm) {
 		/* NOTE: fsl_sai_set_dai_tdm_slot ignores tx_mask and rx_mask */
-		ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0, 0, 8, 32);
-		if (ret < 0) {
-			dev_warn(card->dev, "Unable to set TDM slot : %d\n", ret);
-			return ret;
-		}
+		ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0, 0, 8, DATA_WORD_WIDTH);
+	} else if (is_dsd) {
+		/* NOTE: This is fixed for DSD_U8 */
+		ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0, 0, params_channels(params), 8);
+	} else {
+		/* NOTE: This is fixed for PCM, we always output 2 channels with 32 bit each */
+		ret = snd_soc_dai_set_tdm_slot(cpu_dai, 0, 0, 2, DATA_WORD_WIDTH);
 	}
+	if (ret < 0) {
+		dev_warn(card->dev, "Unable to set TDM slot : %d\n", ret);
+		return ret;
+	}
+
+	ret = snd_soc_dai_set_fmt(cpu_dai, dai_fmt);
+	if (ret < 0) {
+		dev_warn(card->dev, "Unable to set dai fmt: %d\n", ret);
+		return ret;
+	}
+	rtd->dai_link->dai_fmt = dai_fmt;
+
 
 	dev_info(card->dev, "Configured common HW params, RATE %d, MCLK %d, BCLK %d", rate, mclk, bclk);
 
@@ -354,6 +401,38 @@ static int am33xx_s800_i2s_hw_params(struct snd_pcm_substream *substream,
 
 static int am33xx_s800_common_hw_free(struct snd_pcm_substream *substream)
 {
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_card *card = codec_dai->component->card;
+	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
+	int ret;
+
+	/*
+	 * In case we were playing DSD we need to reset the SAI and re-enable
+	 * the continous clocks because otherwise the SAI runs into a hw issue
+	 * where no WCLK is output, for that reason we also reset the MCLK to
+	 * a known value.
+	 *
+	 * We need to do this in hw_free and not in shutdown because the call
+	 * order is: cpu_dai_hw_free -> s8xx_hw_free -> cpu_dai_shutdown -> s8xx_shutdown
+	 * So we need to set the MCLK here for 48 kHz so when we are in the shutdown
+	 * of the cpu_dai we will have the proper MCLK to configure the output
+	 * for 48 kHz.
+	 */
+	if ((rtd->dai_link->dai_fmt & SND_SOC_DAIFMT_CONT) && priv->is_pdm_mode && priv->early_mclk) {
+		dev_info(priv->card.dev, "restoring MCLK to 48 kHz\n");
+		am33xx_s800_set_mclk(priv, 48000, SNDRV_PCM_STREAM_PLAYBACK);
+
+		/* We also reset the bit width und the channel count for the SAI */
+		ret = snd_soc_dai_set_tdm_slot(rtd->cpu_dai, 0, 0, 2, DATA_WORD_WIDTH);
+		if (ret < 0) {
+			dev_warn(card->dev, "Unable to restore TDM slot settings: %d\n", ret);
+		}
+		priv->is_pdm_mode = false;
+
+		/* Also indicate that we are back in PCM mode */
+		gpiod_set_value(priv->pcmndsd, 1);
+	}
 
 	return 0;
 }
@@ -373,10 +452,6 @@ int stream_s8xx_common_startup(struct snd_pcm_substream *substream)
 	else
 		mclk = priv->mclk_rx;
 
-	/*
-	 * If we are running in master mode we need do `disable` the clock,
-	 * this will lower the refcount since we enabled it on hw_params.
-	 */
 	if ((rtd->dai_link->dai_fmt & SND_SOC_DAIFMT_CMM) == 0) {
 		ret = clk_prepare_enable(mclk);
 		if (ret < 0)
@@ -403,12 +478,45 @@ void stream_s8xx_common_shutdown(struct snd_pcm_substream *substream)
 	}
 
 	/*
-	 * If we are running in master mode we need do `disable` the clock,
-	 * this will lower the refcount since we enabled it on hw_params.
+	 * If we are running in master mode we need do `disable` the clock once,
+	 * this will lower the refcount since we enabled it on startup.
 	 */
 	if ((rtd->dai_link->dai_fmt & SND_SOC_DAIFMT_CMM) == 0) {
 		clk_disable_unprepare(mclk);
 	}
+}
+
+static int stream_s8xx_common_trigger(struct snd_pcm_substream *substream, int cmd)
+{
+
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_card *card = codec_dai->component->card;
+	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
+
+	switch (cmd) {
+	case SNDRV_PCM_TRIGGER_START:
+	case SNDRV_PCM_TRIGGER_RESUME:
+	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+		/*
+		 * Only mute/unmute on playback streams
+		 *
+		 * NOTE: This is anyway only temporary and will be done late on
+		 * from the userspace via an ALSA control.
+		 */
+		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+			gpiod_set_value(priv->mute, 0);
+		break;
+	case SNDRV_PCM_TRIGGER_STOP:
+	case SNDRV_PCM_TRIGGER_SUSPEND:
+	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+			gpiod_set_value(priv->mute, 1);
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static struct snd_soc_ops am33xx_s800_i2s_dai_link_ops = {
@@ -416,6 +524,7 @@ static struct snd_soc_ops am33xx_s800_i2s_dai_link_ops = {
 	.hw_free	= am33xx_s800_common_hw_free,
 	.startup	= stream_s8xx_common_startup,
 	.shutdown	= stream_s8xx_common_shutdown,
+	.trigger	= stream_s8xx_common_trigger,
 };
 
 static int am33xx_s800_tdm_hw_params(struct snd_pcm_substream *substream,
@@ -429,6 +538,7 @@ static struct snd_soc_ops am33xx_s800_tdm_dai_link_ops = {
 	.hw_free	= am33xx_s800_common_hw_free,
 	.startup	= stream_s8xx_common_startup,
 	.shutdown	= stream_s8xx_common_shutdown,
+	.trigger	= stream_s8xx_common_trigger,
 };
 
 static int am33xx_s800_drift_info(struct snd_kcontrol *kcontrol,
@@ -564,6 +674,18 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 			    GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
+
+	priv->pcmndsd = devm_gpiod_get_optional(dev, "sue,pcmndsd", GPIOD_OUT_HIGH);
+	if (IS_ERR_OR_NULL(priv->pcmndsd))
+		dev_warn(dev, "could not get sue,pcmndsd GPIO\n");
+
+	priv->hdplus = devm_gpiod_get_optional(dev, "sue,hdplus", GPIOD_OUT_HIGH);
+	if (IS_ERR_OR_NULL(priv->hdplus))
+		dev_warn(dev, "could not get sue,hdplus GPIO\n");
+
+	priv->mute = devm_gpiod_get_optional(dev, "sue,mute", GPIOD_OUT_HIGH);
+	if (IS_ERR_OR_NULL(priv->mute))
+		dev_warn(dev, "could not get sue,mute GPIO\n");
 
 	priv->pllclk = devm_clk_get(&pdev->dev, "pll");
 	if (IS_ERR(priv->pllclk))
