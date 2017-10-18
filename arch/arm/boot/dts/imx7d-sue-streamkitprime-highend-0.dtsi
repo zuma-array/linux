@@ -1,0 +1,182 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+#include <dt-bindings/input/input.h>
+
+/ {
+	model = "StreamUnlimited stream810 StreamKit Prime with voice daughter board";
+	compatible = "sue,streamkitprime-highend", "sue,streamkitprime", "sue,stream810", "fsl,imx7d";
+
+	audio {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_audio>;
+
+		compatible = "sue,am33xx-generic-audio";
+		sue,card-name = "Stream Audio on imx7";
+
+		clocks = <&clks IMX7D_AUDIO_MCLK_ROOT_CLK>,
+			 <&clks IMX7D_AUDIO_MCLK_ROOT_CLK>,
+			 <&clks IMX7D_PLL_AUDIO_POST_DIV>;
+		clock-names = "mclk", "mclk_rx", "pll";
+
+		assigned-clocks = <&clks IMX7D_AUDIO_MCLK_ROOT_SRC>,
+				  <&clks IMX7D_AUDIO_MCLK_ROOT_CLK>;
+		assigned-clock-parents = <&clks IMX7D_PLL_AUDIO_POST_DIV>;
+		assigned-clock-rates = <0>, <24576000>;
+
+		sue,early-mclk;
+		sue,pcmndsd-gpios = <&gpio1 8 GPIO_ACTIVE_HIGH>;
+		sue,mute-gpios = <&gpio1 11 GPIO_ACTIVE_LOW>;
+		sue,hdplus-gpios = <&gpio1 9 GPIO_ACTIVE_LOW>;
+
+		sue,adc-pdn-gpio = <&gpio1 8 0>;
+
+		links {
+			sai1_link: link@0 {
+				sue,name = "analog1";
+				sue,stream-name = "I2S1";
+
+				sue,platform = <&sai1>;
+				sue,cpu-dai-name = "308a0000.sai";
+				sue,continuous-clock;
+
+				sue,dai-links {
+					/* I2S/DSD output */
+					link@0 {
+						sue,codec = <&es9018>;
+						sue,codec-dai-name = "ESS ES9018K2M Sabre";
+					};
+
+					/* I2S input */
+					link@1 {
+						sue,codec = <&pcm_dummy1>;
+						sue,codec-dai-name = "Dummy PCM Codec";
+					};
+				};
+			};
+
+			sai2_link: link@1 {
+				sue,name = "analog2";
+				sue,stream-name = "I2S2";
+
+				sue,platform = <&sai2>;
+				sue,cpu-dai-name = "308b0000.sai";
+				sue,codec = <&lc89091ja>;
+				sue,codec-dai-name = "LC89091JA";
+			};
+
+			sai3_link: link@3 {
+				sue,name = "analog3";
+				sue,stream-name = "I2S2";
+
+				sue,platform = <&sai3>;
+				sue,cpu-dai-name = "308c0000.sai";
+				sue,codec = <&pcm_dummy2>;
+				sue,codec-dai-name = "Dummy PCM Codec";
+
+				sue,codec-is-bfclk-master;
+			};
+		};
+	};
+
+	pcm_dummy1: pcm_dummy1 {
+		compatible = "sue,pcm_dummy";
+	};
+
+	pcm_dummy2: pcm_dummy2 {
+		compatible = "sue,pcm_dummy";
+	};
+};
+
+&i2c2 {
+	/* High-end board additions */
+	es9018: es9018@48 {
+		compatible = "ess,es9018k2m";
+		reg = <0x48>;
+	};
+
+	lc89091ja: lc89091ja@12 {
+		compatible = "onsemi,lc89091ja";
+		reg = <0x12>;
+	};
+};
+
+/*
+ * NOTES for the last number in every line:
+ * 	PAD_CTL_PUS_100K_DOWN	(0 << 5)
+ * 	PAD_CTL_PUS_5K_UP	(1 << 5)
+ * 	PAD_CTL_PUS_47K_UP	(2 << 5)
+ * 	PAD_CTL_PUS_100K_UP	(3 << 5)
+ * 	PAD_CTL_PUE		(1 << 4)
+ * 	PAD_CTL_HYS		(1 << 3)
+ * 	PAD_CTL_SRE_SLOW	(1 << 2)
+ * 	PAD_CTL_SRE_FAST	(0 << 2)
+ * 	PAD_CTL_DSE_X1		(0 << 0) \
+ * 	PAD_CTL_DSE_X2		(2 << 0)  |___ NOTE: the numbering here is not a typo!
+ * 	PAD_CTL_DSE_X4		(1 << 0)  |
+ * 	PAD_CTL_DSE_X6		(3 << 0) /
+ * 	NO_PAD_CTL		(1 << 31): indicate this pin does not need config.
+ * 	SIO			(1 << 30): Software Input On Field.
+ */
+&iomuxc {
+	imx7d-sue-streamkitprime-voice {
+		pinctrl_audio: audiogrp {
+			fsl,pins = <
+				MX7D_PAD_GPIO1_IO08__GPIO1_IO8		0x00    /* PCM/nDSD */
+				MX7D_PAD_GPIO1_IO11__GPIO1_IO11		0x00	/* NMUTE */
+				MX7D_PAD_GPIO1_IO09__GPIO1_IO9		0x00	/* STANDARD/nHDPLUS */
+			>;
+		};
+
+		pinctrl_dummy_codec1: dummy1grp {
+			fsl,pins = <
+				MX7D_PAD_GPIO1_IO11__GPIO1_IO11		0x00	/* NMUTE */
+			>;
+		};
+
+		pinctrl_sai1_he: sai1hegrp {
+ 			fsl,pins = <
+ 				MX7D_PAD_ENET1_RX_CLK__SAI1_TX_BCLK	0x13	/* I2S_BCLK_OUT1_3 */
+ 				MX7D_PAD_SAI1_TX_SYNC__SAI1_TX_SYNC	0x13	/* I2S_WCLK_OUT1_3 */
+ 				MX7D_PAD_ENET1_COL__SAI1_TX_DATA0	0x13	/* I2S_DATA_OUT1 */
+ 				MX7D_PAD_SAI1_RX_DATA__SAI1_RX_DATA0	0x13	/* I2S_DATA_IN1 */
+				MX7D_PAD_ENET1_RGMII_TXC__SAI1_RX_BCLK	0x13	/* I2S_BCLK_IN1_3 */
+				MX7D_PAD_SAI1_RX_SYNC__SAI1_RX_SYNC	0x13	/* I2S_WCLK_IN1_3 */
+ 			>;
+ 		};
+
+		pinctrl_sai2_he: sai2hegrp {
+ 			fsl,pins = <
+ 				MX7D_PAD_SAI1_RX_BCLK__SAI2_RX_BCLK	0x11	/* I2S_BCLK_IN2 */
+ 				MX7D_PAD_SD2_CLK__SAI2_RX_SYNC		0x11	/* I2S_WCLK_IN2 */
+ 				MX7D_PAD_SAI2_RX_DATA__SAI2_RX_DATA0	0x11	/* I2S_DATA_IN2 */
+ 			>;
+ 		};
+	};
+};
+
+&sai1 {
+	pinctrl-0 = <&pinctrl_sai1_he>;
+	fsl,sai-asynchronous;
+	sue,pdm-sync-slave = <&sai3>;
+	/* Set a higher initial SAI clock to enable 384 kHz playback */
+	assigned-clock-rates = <0>, <49152000>;
+};
+
+&sai2 {
+	pinctrl-0 = <&pinctrl_sai2_he>;
+	assigned-clock-rates = <0>, <49152000>;
+};
+
+&sai3 {
+	sue,is-pdm-sync-slave;
+	assigned-clock-rates = <0>, <49152000>;
+};
+
+&iomuxc_lpsr {
+	imx7d-sue-streamkitprime-voice {
+	};
+};
