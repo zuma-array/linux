@@ -405,7 +405,7 @@ dtb-$(CONFIG_SOC_IMX7D) += \
 	imx7d-sue-s810-demo-0-0.dtb \
 	imx7d-sue-s810-factory-0-0.dtb \
 	imx7d-sue-s810-go-0-0.dtb \
-	imx7d-sue-s810-prime-0-0.dtb \
+	imx7d-sue-s810-prime-voice-0-0.dtb \
 	imx7d-sue-s810-unknown-0-0.dtb
 dtb-$(CONFIG_SOC_LS1021A) += \
 	ls1021a-qds.dtb \
