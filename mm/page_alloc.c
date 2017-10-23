@@ -67,6 +67,7 @@
 #include <linux/khugepaged.h>
 #ifdef CONFIG_AMLOGIC_MODIFY
 #include <linux/cma.h>
+#include <linux/amlogic/page_trace.h>
 #endif /* CONFIG_AMLOGIC_MODIFY */
 
 #include <asm/sections.h>
@@ -832,6 +833,8 @@ static inline void __free_one_page(struct page *page,
 	unsigned int max_order;
 #ifdef CONFIG_AMLOGIC_MODIFY
 	int buddy_mg;
+
+	migratetype = get_pageblock_migratetype(page);
 #endif /* CONFIG_AMLOGIC_MODIFY */
 
 	max_order = min_t(unsigned int, MAX_ORDER - 1, pageblock_order);
@@ -1104,6 +1107,9 @@ static __always_inline bool free_pages_prepare(struct page *page,
 	kernel_poison_pages(page, 1 << order, 0);
 	kernel_map_pages(page, 1 << order, 0);
 	kasan_free_pages(page, order);
+#ifdef CONFIG_AMLOGIC_MODIFY
+	reset_page_trace(page, order);
+#endif
 
 	return true;
 }
@@ -2083,8 +2089,13 @@ static bool can_steal_fallback(unsigned int order, int start_mt)
  * pages are moved, we can change migratetype of pageblock and permanently
  * use it's pages as requested migratetype in the future.
  */
+#ifdef CONFIG_AMLOGIC_MODIFY
+static void steal_suitable_fallback(struct zone *zone, struct page *page,
+				    int start_type, int *list_type)
+#else
 static void steal_suitable_fallback(struct zone *zone, struct page *page,
 							  int start_type)
+#endif /* CONFIG_AMLOGIC_MODIFY */
 {
 	unsigned int current_order = page_order(page);
 	int pages;
@@ -2096,6 +2107,9 @@ static void steal_suitable_fallback(struct zone *zone, struct page *page,
 	}
 
 	pages = move_freepages_block(zone, page, start_type);
+#ifdef CONFIG_AMLOGIC_MODIFY
+	*list_type = start_type;
+#endif /* CONFIG_AMLOGIC_MODIFY */
 
 	/* Claim the whole block if over half of it is free */
 	if (pages >= (1 << (pageblock_order-1)) ||
@@ -2256,6 +2270,9 @@ __rmqueue_fallback(struct zone *zone, unsigned int order, int start_migratetype)
 	struct page *page;
 	int fallback_mt;
 	bool can_steal;
+#ifdef CONFIG_AMLOGIC_MODIFY
+	int list_type;
+#endif /* CONFIG_AMLOGIC_MODIFY */
 
 	/* Find the largest possible block of pages in the other list */
 	for (current_order = MAX_ORDER-1;
@@ -2269,14 +2286,22 @@ __rmqueue_fallback(struct zone *zone, unsigned int order, int start_migratetype)
 
 		page = list_first_entry(&area->free_list[fallback_mt],
 						struct page, lru);
+	#ifdef CONFIG_AMLOGIC_MODIFY
+		/* list_type may change after try_to_steal_freepages */
+		list_type = fallback_mt;
+		if (can_steal)
+			steal_suitable_fallback(zone, page, start_migratetype,
+						&list_type);
+	#else
 		if (can_steal)
 			steal_suitable_fallback(zone, page, start_migratetype);
+	#endif /* CONFIG_AMLOGIC_MODIFY */
 
 		/* Remove the page from the freelists */
 		area->nr_free--;
 	#ifdef CONFIG_AMLOGIC_MODIFY
 		__mod_zone_migrate_state(zone, -(1 << current_order),
-					 fallback_mt);
+					 list_type);
 	#endif /* CONFIG_AMLOGIC_MODIFY */
 		list_del(&page->lru);
 		rmv_page_order(page);
@@ -4074,6 +4099,9 @@ out:
 		kmemcheck_pagealloc_alloc(page, order, gfp_mask);
 
 	trace_mm_page_alloc(page, order, alloc_mask, ac.migratetype);
+#ifdef CONFIG_AMLOGIC_MODIFY
+	set_page_trace(page, order, gfp_mask);
+#endif
 
 	return page;
 }
