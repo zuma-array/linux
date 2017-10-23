@@ -60,8 +60,11 @@ struct snd_soc_am33xx_s800 {
 	bool early_mclk;
 
 	struct gpio_desc	*pcmndsd;
-	struct gpio_desc	*mute;
 	struct gpio_desc	*hdplus;
+
+	bool			dsd_mute, sdk_mute;
+	struct mutex		mute_mutex;
+	struct gpio_desc	*mute;
 
 	bool is_pdm_mode;
 
@@ -506,45 +509,11 @@ void stream_s8xx_common_shutdown(struct snd_pcm_substream *substream)
 	}
 }
 
-static int stream_s8xx_common_trigger(struct snd_pcm_substream *substream, int cmd)
-{
-
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-	struct snd_soc_card *card = codec_dai->component->card;
-	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
-
-	switch (cmd) {
-	case SNDRV_PCM_TRIGGER_START:
-	case SNDRV_PCM_TRIGGER_RESUME:
-	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		/*
-		 * Only mute/unmute on playback streams
-		 *
-		 * NOTE: This is anyway only temporary and will be done late on
-		 * from the userspace via an ALSA control.
-		 */
-		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-			gpiod_set_value(priv->mute, 0);
-		break;
-	case SNDRV_PCM_TRIGGER_STOP:
-	case SNDRV_PCM_TRIGGER_SUSPEND:
-	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-			gpiod_set_value(priv->mute, 1);
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 static struct snd_soc_ops am33xx_s800_i2s_dai_link_ops = {
 	.hw_params	= am33xx_s800_i2s_hw_params,
 	.hw_free	= am33xx_s800_common_hw_free,
 	.startup	= stream_s8xx_common_startup,
 	.shutdown	= stream_s8xx_common_shutdown,
-	.trigger	= stream_s8xx_common_trigger,
 };
 
 static int am33xx_s800_tdm_hw_params(struct snd_pcm_substream *substream,
@@ -558,7 +527,6 @@ static struct snd_soc_ops am33xx_s800_tdm_dai_link_ops = {
 	.hw_free	= am33xx_s800_common_hw_free,
 	.startup	= stream_s8xx_common_startup,
 	.shutdown	= stream_s8xx_common_shutdown,
-	.trigger	= stream_s8xx_common_trigger,
 };
 
 static int am33xx_s800_drift_info(struct snd_kcontrol *kcontrol,
@@ -669,6 +637,74 @@ static irqreturn_t am33xx_s800_amp_overcurrent_irq(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
+
+static int am33xx_s800_dsd_mute_get(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_card *card = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
+
+	ucontrol->value.integer.value[0] = priv->dsd_mute;
+
+	return 0;
+}
+
+static int am33xx_s800_dsd_mute_put(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_card *card = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
+
+	mutex_lock(&priv->mute_mutex);
+	priv->dsd_mute = ucontrol->value.integer.value[0];
+
+	if (priv->dsd_mute || priv->sdk_mute)
+		gpiod_set_value(priv->mute, 1);
+	else
+		gpiod_set_value(priv->mute, 0);
+	mutex_unlock(&priv->mute_mutex);
+
+        return 1;
+}
+
+static const struct snd_kcontrol_new am33xx_s800_dsd_mute_control =
+	SOC_SINGLE_BOOL_EXT("dsd-mute", 0,
+			    am33xx_s800_dsd_mute_get,
+			    am33xx_s800_dsd_mute_put);
+
+static int am33xx_s800_sdk_mute_get(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_card *card = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
+
+	ucontrol->value.integer.value[0] = priv->sdk_mute;
+
+	return 0;
+}
+
+static int am33xx_s800_sdk_mute_put(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_card *card = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_am33xx_s800 *priv = snd_soc_card_get_drvdata(card);
+
+	mutex_lock(&priv->mute_mutex);
+	priv->sdk_mute = ucontrol->value.integer.value[0];
+
+	if (priv->dsd_mute || priv->sdk_mute)
+		gpiod_set_value(priv->mute, 1);
+	else
+		gpiod_set_value(priv->mute, 0);
+	mutex_unlock(&priv->mute_mutex);
+
+        return 1;
+}
+
+static const struct snd_kcontrol_new am33xx_s800_sdk_mute_control =
+	SOC_SINGLE_BOOL_EXT("sdk-mute", 0,
+			    am33xx_s800_sdk_mute_get,
+			    am33xx_s800_sdk_mute_put);
 
 static const struct of_device_id snd_soc_am33xx_s800_match[] = {
 	{ .compatible	= "sue,am33xx-generic-audio" },
@@ -989,6 +1025,26 @@ static int snd_soc_am33xx_s800_probe(struct platform_device *pdev)
 
 		if (ret < 0)
 			priv->amp_overheat_gpio = -EINVAL;
+	}
+
+	if (priv->mute) {
+		priv->dsd_mute = false;
+		priv->sdk_mute = false;
+		gpiod_direction_output(priv->mute, 0);
+
+		mutex_init(&priv->mute_mutex);
+
+		ret = snd_ctl_add(priv->card.snd_card, snd_ctl_new1(&am33xx_s800_dsd_mute_control, priv));
+		if (ret < 0) {
+			dev_err(dev, "Could not add dsd-mute mixer control %d\n", ret);
+			return ret;
+		}
+
+		ret = snd_ctl_add(priv->card.snd_card, snd_ctl_new1(&am33xx_s800_sdk_mute_control, priv));
+		if (ret < 0) {
+			dev_err(dev, "Could not add sdk-mute mixer control %d\n", ret);
+			return ret;
+		}
 	}
 
 	priv->amp_overcurrent_gpio = of_get_named_gpio(top_node, "sue,amp-overcurrent-gpio", 0);
