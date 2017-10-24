@@ -11,6 +11,10 @@
 
 #include <sound/dmaengine_pcm.h>
 
+#ifdef CONFIG_SUE_HWCOUNTER_MX7
+#include <misc/hwcounter-mx7.h>
+#endif
+
 #define FSL_SAI_FORMATS (SNDRV_PCM_FMTBIT_S16_LE |\
 			 SNDRV_PCM_FMTBIT_S20_3LE |\
 			 SNDRV_PCM_FMTBIT_S24_LE |\
@@ -149,6 +153,7 @@ struct fsl_sai {
 
 	unsigned int slots;
 	unsigned int slot_width;
+	u32 bclk_rate;
 
 	struct snd_dmaengine_dai_dma_data dma_params_rx;
 	struct snd_dmaengine_dai_dma_data dma_params_tx;
@@ -158,6 +163,13 @@ struct fsl_sai {
 
 	bool is_pdm_sync_slave;
 	struct fsl_sai *pdm_sync_slave;
+
+#ifdef CONFIG_SUE_HWCOUNTER_MX7
+	struct hwcounter_data *hwcounter;
+	struct hrtimer trigger_hrtimer;
+	u32 trigger_target;
+	u32 trigger_state;
+#endif
 };
 
 #define TX 1

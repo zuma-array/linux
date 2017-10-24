@@ -31,6 +31,21 @@
 #define FSL_SAI_FLAGS (FSL_SAI_CSR_SEIE |\
 		       FSL_SAI_CSR_FEIE)
 
+#ifdef CONFIG_SUE_HWCOUNTER_MX7
+
+#include <misc/hwcounter-mx7.h>
+
+#define FSL_SAI_TRIGGER_STATE_IDLE	0
+#define FSL_SAI_TRIGGER_STATE_ARMED	1
+#define FSL_SAI_TRIGGER_STATE_SUCCESS	2
+#define FSL_SAI_TRIGGER_STATE_FAILED	3
+
+const char *sai_trigger_state_strings[] = {
+	"idle", "armed", "success", "failed",
+};
+
+#endif /* CONFIG_SUE_HWCOUNTER_MX7 */
+
 static irqreturn_t fsl_sai_isr(int irq, void *devid)
 {
 	struct fsl_sai *sai = (struct fsl_sai *)devid;
@@ -266,6 +281,8 @@ static int fsl_sai_set_bclk(struct snd_soc_dai *dai, bool tx, u32 freq)
 
 	dev_dbg(dai->dev, "best fit: clock id=%d, div=%d, deviation =%d\n",
 			sai->mclk_id[tx], savediv, savesub);
+
+	sai->bclk_rate = freq;
 
 	return 0;
 }
@@ -671,6 +688,135 @@ static int fsl_sai_hw_free(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+static void fsl_sai_trigger_start(struct fsl_sai *sai, bool tx)
+{
+	if (tx && sai->is_pdm_mode && sai->is_slave_mode && sai->is_pdm_sync_slave) {
+		/*
+		 * We do nothing here, starting of the playback will be handled by the master SAI
+		 *
+		 * NOTE: what should happen if the master never starts us? Maybe start playback
+		 * delayed by a few milliseconds.
+		 */
+	} else if (tx && sai->is_pdm_mode && sai->pdm_sync_slave) {
+		/*
+		 * We stop our master SAI, this will also stop the clocks, then we start the slave
+		 * SAI where the DMA will not run until we enable the clocks on the master SAI,
+		 * which we do in the last step.
+		 *
+		 * TODO: maybe remove the udelay()
+		 */
+		fsl_sai_stop(sai, tx, !tx);
+		udelay(20);
+		fsl_sai_start(sai->pdm_sync_slave, tx);
+		udelay(20);
+		fsl_sai_start(sai, tx);
+	} else {
+		fsl_sai_start(sai, tx);
+	}
+}
+
+#ifdef CONFIG_SUE_HWCOUNTER_MX7
+static void fsl_sai_trigger_start_hwcounter(struct fsl_sai *sai, bool tx)
+{
+	if (sai->trigger_state == FSL_SAI_TRIGGER_STATE_ARMED && sai->hwcounter != NULL && tx) {
+		/* Do the trigger setup and calculation */
+		u32 hwcounter_rate = sai->bclk_rate;
+		u32 current_hwcounter = hwcounter_get_value(sai->hwcounter);
+		s32 d = (s32)sai->trigger_target - (s32)current_hwcounter;
+
+		dev_dbg(&sai->pdev->dev, "Calculated d is %d = (%u - %u)\n", d, sai->trigger_target, current_hwcounter);
+		/* (hwcounter_rate / 10000) is always ~100 us */
+		if (d < (s32)(hwcounter_rate / 10000)) {
+			sai->trigger_state = FSL_SAI_TRIGGER_STATE_FAILED;
+			fsl_sai_trigger_start(sai, tx);
+			dev_info(&sai->pdev->dev, "Trigger failed because the target %u was too close or behind the counter %u\n", sai->trigger_target, current_hwcounter);
+		} else {
+			/* Calculate ktime */
+			ktime_t current_ktime, target_ktime;
+			u32 delta_ticks;
+			u32 ticks_to_ns = 1000000000UL / hwcounter_rate;
+
+			current_ktime = ktime_get();
+			current_hwcounter = hwcounter_get_value(sai->hwcounter);
+
+			delta_ticks = sai->trigger_target - current_hwcounter;
+
+			/* TODO: subtract 80 us when we are doing the busy wait in the hrtimer callback */
+			target_ktime = ktime_add_ns(current_ktime, (delta_ticks * ticks_to_ns));
+
+			hrtimer_start(&sai->trigger_hrtimer, target_ktime, HRTIMER_MODE_ABS);
+			dev_info(&sai->pdev->dev, "Hrtimer started for trigger target %u, current %u, delta %u, factor %u\n",
+							sai->trigger_target, current_hwcounter, delta_ticks, ticks_to_ns);
+
+			dev_info(&sai->pdev->dev, "Setting hrtimer to target %lld, current ktime %lld\n", ktime_to_ns(target_ktime), ktime_to_ns(current_ktime));
+		}
+	} else {
+		fsl_sai_trigger_start(sai, tx);
+	}
+}
+
+enum hrtimer_restart audio_trigger_start(struct hrtimer *timer)
+{
+	struct fsl_sai *sai = container_of(timer, struct fsl_sai, trigger_hrtimer);
+
+	/* TODO: add busy wait */
+	fsl_sai_trigger_start(sai, true);
+	sai->trigger_state = FSL_SAI_TRIGGER_STATE_SUCCESS;
+
+	return HRTIMER_NORESTART;
+}
+
+static ssize_t trigger_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct fsl_sai *sai = (struct fsl_sai *)dev_get_drvdata(dev);
+
+	if (sai->trigger_state == FSL_SAI_TRIGGER_STATE_ARMED)
+		return scnprintf(buf, PAGE_SIZE, "%s %u", sai_trigger_state_strings[sai->trigger_state], sai->trigger_target);
+	else
+		return scnprintf(buf, PAGE_SIZE, "%s", sai_trigger_state_strings[sai->trigger_state]);
+}
+
+static ssize_t trigger_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t n)
+{
+	struct fsl_sai *sai = (struct fsl_sai *)dev_get_drvdata(dev);
+	u32 value;
+
+	if (sscanf(buf, "%u", &value) != 1)
+		return -EINVAL;
+
+	if (sai->trigger_state == FSL_SAI_TRIGGER_STATE_ARMED) {
+		int ret;
+
+		ret = hrtimer_try_to_cancel(&sai->trigger_hrtimer);
+
+		/* The timer could not be aborted */
+		if (ret == -1)
+			return -EBUSY;
+
+		sai->trigger_target = value;
+
+		/* The timer was already active, so we need to restart it with the new trigger time */
+		if (ret == 1)
+			fsl_sai_trigger_start_hwcounter(sai, true);
+	}
+
+	sai->trigger_target = value;
+	sai->trigger_state = FSL_SAI_TRIGGER_STATE_ARMED;
+
+	return n;
+}
+DEVICE_ATTR(trigger, 0600, trigger_show, trigger_store);
+
+#endif /* CONFIG_SUE_HWCOUNTER_MX7 */
+
+static ssize_t bclk_rate_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct fsl_sai *sai = (struct fsl_sai *)dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%u", sai->bclk_rate);
+}
+DEVICE_ATTR(bclk_rate, 0400, bclk_rate_show, NULL);
+
 static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 		struct snd_soc_dai *cpu_dai)
 {
@@ -696,29 +842,11 @@ static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		if (tx && sai->is_pdm_mode && sai->is_slave_mode && sai->is_pdm_sync_slave) {
-			/*
-			 * We do nothing here, starting of the playback will be handled by the master SAI
-			 *
-			 * NOTE: what should happen if the master never starts us? Maybe start playback
-			 * delayed by a few milliseconds.
-			 */
-		} else if (tx && sai->is_pdm_mode && sai->pdm_sync_slave) {
-			/*
-			 * We stop our master SAI, this will also stop the clocks, then we start the slave
-			 * SAI where the DMA will not run until we enable the clocks on the master SAI,
-			 * which we do in the last step.
-			 *
-			 * TODO: maybe remove the udelay()
-			 */
-			fsl_sai_stop(sai, tx, !tx);
-			udelay(20);
-			fsl_sai_start(sai->pdm_sync_slave, tx);
-			udelay(20);
-			fsl_sai_start(sai, tx);
-		} else {
-			fsl_sai_start(sai, tx);
-		}
+#ifdef CONFIG_SUE_HWCOUNTER_MX7
+		fsl_sai_trigger_start_hwcounter(sai, tx);
+#else
+		fsl_sai_trigger_start(sai, tx);
+#endif
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
@@ -770,6 +898,10 @@ static int fsl_sai_startup(struct snd_pcm_substream *substream,
 
 	regmap_update_bits(sai->regmap, FSL_SAI_xCR3(tx), FSL_SAI_CR3_TRCE,
 			   FSL_SAI_CR3_TRCE);
+
+#ifdef CONFIG_SUE_HWCOUNTER_MX7
+	sai->trigger_state = FSL_SAI_TRIGGER_STATE_IDLE;
+#endif /* CONFIG_SUE_HWCOUNTER_MX7 */
 
 	return ret;
 }
@@ -977,6 +1109,11 @@ static int fsl_sai_probe(struct platform_device *pdev)
 	u32 buffer_size;
 	struct device_node *pdm_slave_node;
 
+#ifdef CONFIG_SUE_HWCOUNTER_MX7
+	struct device_node *hwcounter_node;
+	struct platform_device *hwcounter_pdev;
+#endif
+
 	sai = devm_kzalloc(&pdev->dev, sizeof(*sai), GFP_KERNEL);
 	if (!sai)
 		return -ENOMEM;
@@ -1108,10 +1245,60 @@ static int fsl_sai_probe(struct platform_device *pdev)
 		buffer_size = IMX_SAI_DMABUF_SIZE;
 
 	if (sai->sai_on_imx)
-		return imx_pcm_dma_init(pdev, buffer_size);
+		ret = imx_pcm_dma_init(pdev, buffer_size);
 	else
-		return devm_snd_dmaengine_pcm_register(&pdev->dev, NULL,
-				SND_DMAENGINE_PCM_FLAG_NO_RESIDUE);
+		ret = devm_snd_dmaengine_pcm_register(&pdev->dev, NULL, SND_DMAENGINE_PCM_FLAG_NO_RESIDUE);
+
+	if (ret)
+		return ret;
+
+	device_create_file(&pdev->dev, &dev_attr_bclk_rate);
+#ifdef CONFIG_SUE_HWCOUNTER_MX7
+	/*
+	 * TODO: It might happen that the probe of this driver is called before the
+	 * probe of the hwcounter, in that case we would faile here, so maybe it
+	 * would make sense to defer the probe.
+	 */
+	hwcounter_node = of_parse_phandle(np, "hwcounter-node", 0);
+
+	if (hwcounter_node == NULL) {
+		dev_warn(&pdev->dev, "hwcounter-node node not found, trigger will not be available for this SAI\n");
+		goto trigger_init_end;
+	}
+
+	hwcounter_pdev = of_find_device_by_node(hwcounter_node);
+	of_node_put(hwcounter_node);
+	if (hwcounter_pdev == NULL) {
+		dev_warn(&pdev->dev, "could not get platform device for hwcounter-node, trigger will not be available\n");
+		goto trigger_init_end;
+	}
+
+	sai->hwcounter = platform_get_drvdata(hwcounter_pdev);
+	if (sai->hwcounter == NULL) {
+		dev_err(&pdev->dev, "could not get hwcounter data for hwcounter-node, trigger will not be available\n");
+		goto trigger_init_end;
+	}
+
+	sai->trigger_state = FSL_SAI_TRIGGER_STATE_IDLE;
+	hrtimer_init(&sai->trigger_hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
+	sai->trigger_hrtimer.function = audio_trigger_start;
+
+	device_create_file(&pdev->dev, &dev_attr_trigger);
+
+trigger_init_end:
+#endif /* CONFIG_SUE_HWCOUNTER_MX7 */
+
+	return 0;
+}
+
+static int fsl_sai_remove(struct platform_device *pdev)
+{
+	device_remove_file(&pdev->dev, &dev_attr_bclk_rate);
+#ifdef CONFIG_SUE_HWCOUNTER_MX7
+	device_remove_file(&pdev->dev, &dev_attr_trigger);
+#endif
+
+	return 0;
 }
 
 static const struct of_device_id fsl_sai_ids[] = {
@@ -1169,6 +1356,7 @@ static const struct dev_pm_ops fsl_sai_pm_ops = {
 
 static struct platform_driver fsl_sai_driver = {
 	.probe = fsl_sai_probe,
+	.remove = fsl_sai_remove,
 	.driver = {
 		.name = "fsl-sai",
 		.pm = &fsl_sai_pm_ops,
