@@ -24,6 +24,7 @@
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
+#include <linux/busfreq-imx.h>
 
 #define DATA_WORD_WIDTH 32
 
@@ -32,6 +33,9 @@
 
 #define IMX7D_SAI_PLL_48k	884736000UL
 #define IMX7D_SAI_PLL_44k1	812851200UL
+
+#define HDPLUS_PCM_MIN_RATE	192000
+#define HIGH_AHB_IPG_MIN_RATE	705600
 
 struct snd_soc_am33xx_s800 {
 	struct snd_soc_card	card;
@@ -66,6 +70,8 @@ struct snd_soc_am33xx_s800 {
 	 * as an output. So we must keep the state of the GPIO in a separate variable.
 	 */
 	int adc_pdn_gpio, adc_pdn_status;
+
+	bool requested_high_busfreq;
 };
 
 /*
@@ -282,7 +288,15 @@ static int am33xx_s800_common_hw_params(struct snd_pcm_substream *substream,
 		dev_info(card->dev, "Format is PCM\n");
 	}
 
-	if (is_dsd || rate > 192000)
+	/* On DSD 4x we increase the AHB frequency */
+	priv->requested_high_busfreq = false;
+	if (is_dsd && rate > HIGH_AHB_IPG_MIN_RATE && dai_fmt & SND_SOC_DAIFMT_CBS_CFS) {
+		request_bus_freq(BUS_FREQ_HIGH);
+		set_high_ahb_ipg_freq();
+		priv->requested_high_busfreq = true;
+	}
+
+	if (is_dsd || rate > HDPLUS_PCM_MIN_RATE)
 		gpiod_set_value(priv->hdplus, 1);
 	else
 		gpiod_set_value(priv->hdplus, 0);
@@ -432,6 +446,12 @@ static int am33xx_s800_common_hw_free(struct snd_pcm_substream *substream)
 
 		/* Also indicate that we are back in PCM mode */
 		gpiod_set_value(priv->pcmndsd, 1);
+	}
+
+	if ((rtd->dai_link->dai_fmt & SND_SOC_DAIFMT_CBS_CFS) && priv->requested_high_busfreq) {
+		set_low_ahb_ipg_freq();
+		release_bus_freq(BUS_FREQ_HIGH);
+		priv->requested_high_busfreq = false;
 	}
 
 	return 0;
