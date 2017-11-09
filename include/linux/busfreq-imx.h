@@ -47,6 +47,8 @@ void release_bus_freq(enum bus_freq_mode mode);
 int register_busfreq_notifier(struct notifier_block *nb);
 int unregister_busfreq_notifier(struct notifier_block *nb);
 int get_bus_freq_mode(void);
+int set_high_ahb_ipg_freq(void);
+int set_low_ahb_ipg_freq(void);
 #else
 static inline void request_bus_freq(enum bus_freq_mode mode)
 {
@@ -65,6 +67,14 @@ static inline int unregister_busfreq_notifier(struct notifier_block *nb)
 static inline int get_bus_freq_mode(void)
 {
 	return BUS_FREQ_HIGH;
+}
+static inline int set_high_ahb_ipg_freq(void)
+{
+	return 0;
+}
+static inline int set_low_ahb_ipg_freq(void)
+{
+	return 0;
 }
 #endif
 #endif

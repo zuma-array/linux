@@ -43,6 +43,12 @@
 #define MMDC_MDMISC_DDR_TYPE_DDR3	0
 #define MMDC_MDMISC_DDR_TYPE_LPDDR2	1
 
+#define AHB_HIGH_CLK_RATE 270000000
+#define IPG_HIGH_CLK_RATE 135000000
+
+#define AHB_LOW_CLK_RATE 135000000
+#define IPG_LOW_CLK_RATE 67500000
+
 unsigned int ddr_med_rate;
 unsigned int ddr_normal_rate;
 unsigned long ddr_freq_change_total_size;
@@ -63,6 +69,7 @@ static int high_bus_count, med_bus_count, audio_bus_count, low_bus_count;
 static unsigned int ddr_low_rate;
 static int cur_bus_freq_mode;
 static u32 org_arm_rate;
+static int high_ahb_ipg_freq;
 
 extern unsigned long iram_tlb_phys_addr;
 extern int unsigned long iram_tlb_base_addr;
@@ -91,6 +98,7 @@ static struct clk *pfd1_332m;
 static struct clk *pll_dram;
 static struct clk *ahb_sel_clk;
 static struct clk *axi_clk;
+static struct clk *ipg_clk;
 
 static struct clk *m4_clk;
 static struct clk *arm_clk;
@@ -554,6 +562,11 @@ static void exit_lpm_imx7d(void)
 
 static void reduce_bus_freq(void)
 {
+	if (high_ahb_ipg_freq == 1) {
+		dev_err(busfreq_dev, "tried to enter low busfreq mode when in high AHB/IPG mode\n");
+		return;
+	}
+
 	if (cpu_is_imx6())
 		clk_prepare_enable(pll3_clk);
 
@@ -814,6 +827,35 @@ int get_bus_freq_mode(void)
 	return cur_bus_freq_mode;
 }
 EXPORT_SYMBOL(get_bus_freq_mode);
+
+int set_high_ahb_ipg_freq(void)
+{
+	if (high_bus_freq_mode == 0 || high_ahb_ipg_freq == 1)
+		return -EINVAL;
+
+	dev_info(busfreq_dev, "entering high AHB/IPG mode\n");
+	clk_set_rate(ahb_clk, AHB_HIGH_CLK_RATE);
+	clk_set_rate(ipg_clk, IPG_HIGH_CLK_RATE);
+
+	high_ahb_ipg_freq = 1;
+
+	return 0;
+}
+EXPORT_SYMBOL(set_high_ahb_ipg_freq);
+
+int set_low_ahb_ipg_freq(void)
+{
+	if (high_ahb_ipg_freq == 0)
+		return -EINVAL;
+
+	dev_info(busfreq_dev, "entering low (normal) AHB/IPG mode\n");
+	clk_set_rate(ipg_clk, IPG_LOW_CLK_RATE);
+	clk_set_rate(ahb_clk, AHB_LOW_CLK_RATE);
+	high_ahb_ipg_freq = 0;
+
+	return 0;
+}
+EXPORT_SYMBOL(set_low_ahb_ipg_freq);
 
 static struct map_desc ddr_iram_io_desc __initdata = {
 	/* .virtual and .pfn are run-time assigned */
@@ -1103,12 +1145,13 @@ static int busfreq_probe(struct platform_device *pdev)
 		pfd2_270m = devm_clk_get(&pdev->dev, "pfd2_270m");
 		ahb_clk = devm_clk_get(&pdev->dev, "ahb");
 		axi_clk = devm_clk_get(&pdev->dev, "axi");
+		ipg_clk = devm_clk_get(&pdev->dev, "ipg");
 		if (IS_ERR(osc_clk) || IS_ERR(axi_sel_clk) || IS_ERR(ahb_clk)
 			|| IS_ERR(pfd0_392m) || IS_ERR(dram_root)
 			|| IS_ERR(dram_alt_sel) || IS_ERR(pll_dram)
 			|| IS_ERR(dram_alt_root) || IS_ERR(pfd1_332m)
 			|| IS_ERR(ahb_clk) || IS_ERR(axi_clk)
-			|| IS_ERR(pfd2_270m)) {
+			|| IS_ERR(pfd2_270m) || IS_ERR(ipg_clk)) {
 			dev_err(busfreq_dev,
 				"%s: failed to get busfreq clk\n", __func__);
 			return -EINVAL;
@@ -1134,6 +1177,7 @@ static int busfreq_probe(struct platform_device *pdev)
 	audio_bus_freq_mode = 0;
 	ultra_low_bus_freq_mode = 0;
 	cur_bus_freq_mode = BUS_FREQ_HIGH;
+	high_ahb_ipg_freq = 0;
 
 	bus_freq_scaling_is_active = 1;
 	bus_freq_scaling_initialized = 1;
