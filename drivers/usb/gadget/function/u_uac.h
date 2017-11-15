@@ -51,7 +51,7 @@ static ssize_t f_uac_opts_##name##_show(				\
 	int result;							\
 									\
 	mutex_lock(&opts->lock);					\
-	result = sprintf(page, "%u\n", opts->name);			\
+	result = sprintf(page, "%d\n", opts->name);			\
 	mutex_unlock(&opts->lock);					\
 									\
 	return result;							\
@@ -63,7 +63,7 @@ static ssize_t f_uac_opts_##name##_store(				\
 {									\
 	struct f_uac_opts *opts = to_f_uac_opts(item);		\
 	int ret;							\
-	u32 num;							\
+	s32 num;							\
 									\
 	mutex_lock(&opts->lock);					\
 	if (opts->refcnt) {						\
@@ -71,7 +71,7 @@ static ssize_t f_uac_opts_##name##_store(				\
 		goto end;						\
 	}								\
 									\
-	ret = kstrtou32(page, 0, &num);					\
+	ret = kstrtos32(page, 0, &num);					\
 	if (ret)							\
 		goto end;						\
 									\
