@@ -33,8 +33,8 @@
  * We have three interfaces - one AudioControl and two AudioStreaming
  *
  * The driver implements a simple UAC_1 topology.
- * USB-OUT -> IT_1 -> OT_2 -> ALSA_Capture
- * ALSA_Playback -> IT_3 -> OT_4 -> USB-IN
+ * USB-OUT -> IT_1 -> FU_2 -> OT_3 -> ALSA_Capture
+ * ALSA_Playback -> IT_4 -> OT_5 -> USB-IN
  */
 #define F_AUDIO_AC_INTERFACE		0
 #define F_AUDIO_AS_OUT_INTERFACE	1
@@ -46,9 +46,19 @@
 static struct usb_interface_descriptor ac_interface_desc = {
 	.bLength =		USB_DT_INTERFACE_SIZE,
 	.bDescriptorType =	USB_DT_INTERFACE,
-	.bNumEndpoints =	0,
+	.bNumEndpoints =	1,
 	.bInterfaceClass =	USB_CLASS_AUDIO,
 	.bInterfaceSubClass =	USB_SUBCLASS_AUDIOCONTROL,
+};
+
+/* Interrupt endpoint */
+static struct usb_endpoint_descriptor ac_interrupt_desc = {
+	.bLength = USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType = USB_DT_ENDPOINT,
+	.bEndpointAddress = USB_DIR_IN,
+	.bmAttributes = USB_ENDPOINT_XFER_INT,
+	.wMaxPacketSize = cpu_to_le16(2),
+	.bInterval = 8,
 };
 
 /*
@@ -60,7 +70,8 @@ DECLARE_UAC_AC_HEADER_DESCRIPTOR(2);
 #define UAC_DT_AC_HEADER_LENGTH	UAC_DT_AC_HEADER_SIZE(F_AUDIO_NUM_INTERFACES)
 /* 2 input terminals and 2 output terminals */
 #define UAC_DT_TOTAL_LENGTH (UAC_DT_AC_HEADER_LENGTH \
-	+ 2*UAC_DT_INPUT_TERMINAL_SIZE + 2*UAC_DT_OUTPUT_TERMINAL_SIZE)
+	+ 2*UAC_DT_INPUT_TERMINAL_SIZE + 2*UAC_DT_OUTPUT_TERMINAL_SIZE \
+	+ UAC_DT_FEATURE_UNIT_SIZE(0))
 /* B.3.2  Class-Specific AC Interface Descriptor */
 static struct uac1_ac_header_descriptor_2 ac_header_desc = {
 	.bLength =		UAC_DT_AC_HEADER_LENGTH,
@@ -87,7 +98,20 @@ static struct uac_input_terminal_descriptor usb_out_it_desc = {
 	.wChannelConfig =	cpu_to_le16(0x3),
 };
 
-#define IO_OUT_OT_ID	2
+DECLARE_UAC_FEATURE_UNIT_DESCRIPTOR(0);
+
+#define USB_OUT_FU_ID 2
+static struct uac_feature_unit_descriptor_0 usb_out_fu_desc = {
+	.bLength		= UAC_DT_FEATURE_UNIT_SIZE(0),
+	.bDescriptorType	= USB_DT_CS_INTERFACE,
+	.bDescriptorSubtype	= UAC_FEATURE_UNIT,
+	.bUnitID		= USB_OUT_FU_ID,
+	.bSourceID		= USB_OUT_IT_ID,
+	.bControlSize		= 2,
+	.bmaControls[0]		= cpu_to_le16((UAC_FU_MUTE | UAC_FU_VOLUME)),
+};
+
+#define IO_OUT_OT_ID	3
 static struct uac1_output_terminal_descriptor io_out_ot_desc = {
 	.bLength		= UAC_DT_OUTPUT_TERMINAL_SIZE,
 	.bDescriptorType	= USB_DT_CS_INTERFACE,
@@ -95,10 +119,10 @@ static struct uac1_output_terminal_descriptor io_out_ot_desc = {
 	.bTerminalID		= IO_OUT_OT_ID,
 	.wTerminalType		= cpu_to_le16(UAC_OUTPUT_TERMINAL_SPEAKER),
 	.bAssocTerminal		= 0,
-	.bSourceID		= USB_OUT_IT_ID,
+	.bSourceID		= USB_OUT_FU_ID,
 };
 
-#define IO_IN_IT_ID	3
+#define IO_IN_IT_ID	4
 static struct uac_input_terminal_descriptor io_in_it_desc = {
 	.bLength		= UAC_DT_INPUT_TERMINAL_SIZE,
 	.bDescriptorType	= USB_DT_CS_INTERFACE,
@@ -109,7 +133,7 @@ static struct uac_input_terminal_descriptor io_in_it_desc = {
 	.wChannelConfig		= cpu_to_le16(0x3),
 };
 
-#define USB_IN_OT_ID	4
+#define USB_IN_OT_ID	5
 static struct uac1_output_terminal_descriptor usb_in_ot_desc = {
 	.bLength =		UAC_DT_OUTPUT_TERMINAL_SIZE,
 	.bDescriptorType =	USB_DT_CS_INTERFACE,
@@ -247,9 +271,11 @@ static struct usb_descriptor_header *f_audio_desc[] = {
 	(struct usb_descriptor_header *)&ac_header_desc,
 
 	(struct usb_descriptor_header *)&usb_out_it_desc,
+	(struct usb_descriptor_header *)&usb_out_fu_desc,
 	(struct usb_descriptor_header *)&io_out_ot_desc,
 	(struct usb_descriptor_header *)&io_in_it_desc,
 	(struct usb_descriptor_header *)&usb_in_ot_desc,
+	(struct usb_descriptor_header *)&ac_interrupt_desc,
 
 	(struct usb_descriptor_header *)&as_out_interface_alt_0_desc,
 	(struct usb_descriptor_header *)&as_out_interface_alt_1_desc,
@@ -275,6 +301,7 @@ enum {
 	STR_AC_IF,
 	STR_USB_OUT_IT,
 	STR_USB_OUT_IT_CH_NAMES,
+	STR_USB_OUT_FU,
 	STR_IO_OUT_OT,
 	STR_IO_IN_IT,
 	STR_IO_IN_IT_CH_NAMES,
@@ -289,6 +316,7 @@ static struct usb_string strings_uac1[] = {
 	[STR_AC_IF].s = "AC Interface",
 	[STR_USB_OUT_IT].s = "Playback Input terminal",
 	[STR_USB_OUT_IT_CH_NAMES].s = "Playback Channels",
+	[STR_USB_OUT_FU].s = "Playback Volume",
 	[STR_IO_OUT_OT].s = "Playback Output terminal",
 	[STR_IO_IN_IT].s = "Capture Input terminal",
 	[STR_IO_IN_IT_CH_NAMES].s = "Capture Channels",
@@ -314,6 +342,74 @@ static struct usb_gadget_strings *uac1_strings[] = {
  * This function is an ALSA sound card following USB Audio Class Spec 1.0.
  */
 
+static void uac_int_complete(struct usb_ep *ep, struct usb_request *req)
+{
+	struct g_audio *agdev = req->context;
+	struct usb_gadget *gadget = agdev->gadget;
+	struct device *dev = &gadget->dev;
+
+	switch (req->status) {
+		case 0:
+			dev_dbg(dev, "Interrupt sent!");
+			break;
+		default:
+			dev_dbg(dev, "Interrupt error: %d\n", req->status);
+			break;
+	}
+
+	kfree(req->buf);
+	usb_ep_free_request(agdev->int_ep, req);
+}
+
+static int uac_int_send(struct g_audio *agdev, int pending, int fu)
+{
+	struct usb_gadget *gadget = agdev->gadget;
+	struct uac1_status_word *msg;
+	struct device *dev = &gadget->dev;
+	struct usb_request *req;
+	int ret;
+
+	if (!agdev->int_ep)
+		return -ENODEV;
+
+	req = usb_ep_alloc_request(agdev->int_ep, GFP_KERNEL);
+	if (req == NULL)
+		return -ENOMEM;
+	msg = kmalloc(sizeof(struct uac1_status_word), GFP_KERNEL);
+	if (msg == NULL) {
+		usb_ep_free_request(agdev->int_ep, req);
+		return -ENOMEM;
+	}
+
+	msg->bStatusType = pending ? UAC1_STATUS_TYPE_IRQ_PENDING : 0;
+	msg->bOriginator = fu;
+
+	req->zero = 0;
+	req->context = agdev;
+	req->length = sizeof(msg);
+	req->complete = uac_int_complete;
+	req->buf = msg;
+
+	dev_dbg(dev, "%s(): queue interrupt 0x%02x 0x%02x\n", __func__,
+			((u8*)msg)[0], ((u8*)msg)[1]);
+	ret = usb_ep_queue(agdev->int_ep, req, GFP_ATOMIC);
+	if (ret)
+		dev_err(dev, "%s:%d usb_ep_queue failed: %d\n", __func__,
+				__LINE__, ret);
+
+	return 0;
+}
+
+static void interrupt_capture_volume_cb(struct g_audio *agdev)
+{
+	uac_int_send(agdev, 1, USB_OUT_FU_ID);
+}
+
+static void interrupt_capture_mute_cb(struct g_audio *agdev)
+{
+	uac_int_send(agdev, 1, USB_OUT_FU_ID);
+}
+
 static void uac_cs_attr_sample_rate(struct usb_ep *ep, struct usb_request *req)
 {
 	struct usb_function *fn = ep->driver_data;
@@ -338,6 +434,139 @@ static void uac_cs_attr_sample_rate(struct usb_ep *ep, struct usb_request *req)
 		opts->c_srate_active = val;
 		u_audio_set_capture_srate(agdev, opts->c_srate_active);
 	}
+}
+
+static void uac_cs_volume(struct usb_ep *ep, struct usb_request *req)
+{
+	struct usb_function *fn = ep->driver_data;
+	struct usb_configuration *config = fn->config;
+	struct usb_composite_dev *cdev = config->cdev;
+	struct g_audio *agdev = func_to_g_audio(fn);
+	int val = 0;
+
+	if (req->actual != 2) {
+		WARN(cdev, "Invalid data size for UAC_FU_VOLUME.\n");
+		return;
+	}
+
+	val = ((s16)le16_to_cpu(*((u16 *)req->buf)) >> 8);
+	u_audio_set_capture_volume(agdev, val);
+}
+
+static void uac_cs_mute(struct usb_ep *ep, struct usb_request *req)
+{
+	struct usb_function *fn = ep->driver_data;
+	struct usb_configuration *config = fn->config;
+	struct usb_composite_dev *cdev = config->cdev;
+	struct g_audio *agdev = func_to_g_audio(fn);
+	int val = 0;
+
+	if (req->actual != 1) {
+		WARN(cdev, "Invalid data size for UAC_FU_MUTE.\n");
+		return;
+	}
+
+	val = *((u8 *)req->buf);
+	u_audio_set_capture_mute(agdev, val);
+}
+
+static int audio_set_interface_req(struct usb_function *f,
+		const struct usb_ctrlrequest *ctrl)
+{
+	struct usb_composite_dev *cdev = f->config->cdev;
+	u8 interface = le16_to_cpu(ctrl->wIndex) & 0xff;
+	struct usb_request *req = f->config->cdev->req;
+	u16 len = le16_to_cpu(ctrl->wLength);
+	u16 w_value = le16_to_cpu(ctrl->wValue);
+	int value = -EOPNOTSUPP;
+	u8 cs = w_value >> 8;
+
+	DBG(cdev, "bRequestType 0x%x, bRequest 0x%x, w_value 0x%04x, len %d, interface %d\n",
+			ctrl->bRequestType, ctrl->bRequest, w_value, len, interface);
+
+	switch (ctrl->bRequest) {
+	case UAC_SET_CUR:
+		if (cs == UAC_FU_VOLUME && len >= 2) {
+			cdev->gadget->ep0->driver_data = f;
+			req->complete = uac_cs_volume;
+			value = len;
+		} else if (cs == UAC_FU_MUTE && len >= 1) {
+			cdev->gadget->ep0->driver_data = f;
+			req->complete = uac_cs_mute;
+			value = len;
+		}
+		break;
+	case UAC_GET_MIN:
+	case UAC_GET_MAX:
+	case UAC_GET_RES:
+	case UAC_GET_MEM:
+		break;
+	default:
+		break;
+	}
+
+	return value;
+}
+
+static int audio_get_interface_req(struct usb_function *f,
+		const struct usb_ctrlrequest *ctrl)
+{
+	struct usb_composite_dev *cdev = f->config->cdev;
+	u8 interface = le16_to_cpu(ctrl->wIndex) & 0xff;
+	struct usb_request *req = f->config->cdev->req;
+	struct g_audio *agdev = func_to_g_audio(f);
+	u16 len = le16_to_cpu(ctrl->wLength);
+	u16 w_value = le16_to_cpu(ctrl->wValue);
+	int value = -EOPNOTSUPP;
+	u8 cs = w_value >> 8;
+
+	DBG(cdev, "bRequestType 0x%x, bRequest 0x%x, w_value 0x%04x, len %d, interface %d\n",
+			ctrl->bRequestType, ctrl->bRequest, w_value, len, interface);
+
+	switch (ctrl->bRequest) {
+	case UAC_GET_CUR:
+		if (cs == UAC_FU_VOLUME && len >= 2) {
+			s16 *buf = (s16 *)req->buf;
+			*buf = cpu_to_le16((s16)(agdev->params.c_volume << 8));
+			value = len;
+		} else if (cs == UAC_FU_MUTE && len >= 1) {
+			s8 *buf = (s8 *)req->buf;
+			*buf = cpu_to_le16((s16)(agdev->params.c_volume << 8));
+			*buf = agdev->params.c_mute;
+			value = len;
+		}
+		break;
+	case UAC_GET_MIN:
+		if (cs == UAC_FU_VOLUME && len >= 2) {
+			s16 *buf = (s16 *)req->buf;
+			*buf = cpu_to_le16((s16)((agdev->params.c_vol_min << 8) / 100));
+			value = len;
+		}
+		break;
+	case UAC_GET_MAX:
+		if (cs == UAC_FU_VOLUME && len >= 2) {
+			s16 *buf = (s16 *)req->buf;
+			*buf = cpu_to_le16((s16)((agdev->params.c_vol_max << 8) / 100));
+			value = len;
+		}
+		break;
+	case UAC_GET_RES:
+		if (cs == UAC_FU_VOLUME && len >= 2) {
+			s16 *buf = (s16 *)req->buf;
+			*buf = cpu_to_le16((s16)((agdev->params.c_vol_step << 8) / 100));
+			value = len;
+		}
+		break;
+	case UAC_GET_MEM:
+		break;
+	case UAC_GET_STAT:
+		value = 0;
+		break;
+	default:
+		break;
+	}
+
+	return value;
 }
 
 static int audio_set_endpoint_req(struct usb_function *f,
@@ -452,6 +681,14 @@ f_audio_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 		value = audio_get_endpoint_req(f, ctrl);
 		break;
 
+	case USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE:
+		value = audio_set_interface_req(f, ctrl);
+		break;
+
+	case USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE:
+		value = audio_get_interface_req(f, ctrl);
+		break;
+
 	default:
 		ERROR(cdev, "invalid control req%02x.%02x v%04x i%04x l%d\n",
 			ctrl->bRequestType, ctrl->bRequest,
@@ -463,7 +700,7 @@ f_audio_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 		DBG(cdev, "audio req%02x.%02x v%04x i%04x l%d\n",
 			ctrl->bRequestType, ctrl->bRequest,
 			w_value, w_index, w_length);
-		req->zero = 0;
+		req->zero = value == 0 ? 1 : 0;
 		req->length = value;
 		value = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
 		if (value < 0)
@@ -477,6 +714,7 @@ f_audio_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 static int f_audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 {
 	struct usb_composite_dev *cdev = f->config->cdev;
+	struct g_audio *audio = func_to_g_audio(f);
 	struct usb_gadget *gadget = cdev->gadget;
 	struct device *dev = &gadget->dev;
 	struct f_uac *uac1 = func_to_uac(f);
@@ -493,6 +731,15 @@ static int f_audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		if (alt) {
 			dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 			return -EINVAL;
+		}
+
+		if (audio->int_ep) {
+			config_ep_by_speed(gadget, f, audio->int_ep);
+			ret = usb_ep_enable(audio->int_ep);
+			if (ret) {
+				dev_err(dev, "Failed to enabled interrupt endpoint: %d\n", ret);
+				return ret;
+			}
 		}
 		return 0;
 	}
@@ -573,6 +820,7 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	ac_interface_desc.iInterface = us[STR_AC_IF].id;
 	usb_out_it_desc.iTerminal = us[STR_USB_OUT_IT].id;
 	usb_out_it_desc.iChannelNames = us[STR_USB_OUT_IT_CH_NAMES].id;
+	usb_out_fu_desc.iFeature = us[STR_USB_OUT_FU].id;
 	io_out_ot_desc.iTerminal = us[STR_IO_OUT_OT].id;
 	as_out_interface_alt_0_desc.iInterface = us[STR_AS_OUT_IF_ALT0].id;
 	as_out_interface_alt_1_desc.iInterface = us[STR_AS_OUT_IF_ALT1].id;
@@ -643,12 +891,22 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 		goto fail;
 	audio->out_ep = ep;
 	audio->out_ep->desc = &as_out_ep_desc;
+	audio->out_ep->driver_data = f;
 
 	ep = usb_ep_autoconfig(cdev->gadget, &as_in_ep_desc);
 	if (!ep)
 		goto fail;
 	audio->in_ep = ep;
 	audio->in_ep->desc = &as_in_ep_desc;
+	audio->in_ep->driver_data = f;
+
+	ep = usb_ep_autoconfig(cdev->gadget, &ac_interrupt_desc);
+	if (!ep)
+		goto fail;
+	audio->int_ep = ep;
+	audio->int_ep->driver_data = f;
+	audio->interrupt_capture_volume_cb = interrupt_capture_volume_cb;
+	audio->interrupt_capture_mute_cb = interrupt_capture_mute_cb;
 
 	/* copy descriptors, and track endpoint copies */
 	status = usb_assign_descriptors(f, f_audio_desc, f_audio_desc, NULL,
@@ -667,6 +925,9 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	memcpy(audio->params.p_srate, audio_opts->p_srate,
 			sizeof(audio->params.p_srate));
 	audio->params.p_srate_active = audio_opts->p_srate_active;
+	audio->params.c_vol_min = audio_opts->c_vol_min;
+	audio->params.c_vol_max = audio_opts->c_vol_max;
+	audio->params.c_vol_step = audio_opts->c_vol_step;
 	audio->params.p_ssize = audio_opts->p_ssize;
 	audio->params.req_number = audio_opts->req_number;
 
@@ -697,6 +958,9 @@ static struct configfs_item_operations f_uac1_item_ops = {
 
 
 UAC_ATTRIBUTE(c_chmask);
+UAC_ATTRIBUTE(c_vol_min);
+UAC_ATTRIBUTE(c_vol_max);
+UAC_ATTRIBUTE(c_vol_step);
 UAC_ATTRIBUTE(c_ssize);
 UAC_ATTRIBUTE(p_chmask);
 UAC_ATTRIBUTE(p_ssize);
@@ -708,6 +972,9 @@ UAC_RATE_ATTRIBUTE(c_srate);
 static struct configfs_attribute *f_uac1_attrs[] = {
 	&f_uac_opts_attr_c_chmask,
 	&f_uac_opts_attr_c_srate,
+	&f_uac_opts_attr_c_vol_min,
+	&f_uac_opts_attr_c_vol_max,
+	&f_uac_opts_attr_c_vol_step,
 	&f_uac_opts_attr_c_ssize,
 	&f_uac_opts_attr_p_chmask,
 	&f_uac_opts_attr_p_srate,
@@ -751,6 +1018,9 @@ static struct usb_function_instance *f_audio_alloc_inst(void)
 	opts->p_chmask = UAC_DEF_PCHMASK;
 	opts->p_srate[0] = UAC_DEF_PSRATE;
 	opts->p_srate_active = UAC_DEF_PSRATE;
+	opts->c_vol_min = UAC_DEF_VOL_MIN;
+	opts->c_vol_max = UAC_DEF_VOL_MAX;
+	opts->c_vol_step = UAC_DEF_VOL_STEP;
 	opts->p_ssize = UAC_DEF_PSSIZE;
 	opts->req_number = UAC_DEF_REQ_NUM;
 	return &opts->func_inst;
