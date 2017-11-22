@@ -40,7 +40,12 @@
 #define F_AUDIO_AS_OUT_INTERFACE	1
 #define F_AUDIO_AS_IN_INTERFACE		2
 /* Number of streaming interfaces */
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 #define F_AUDIO_NUM_INTERFACES		2
+#else
+#define F_AUDIO_NUM_INTERFACES		1
+#endif
+
 
 /* B.3.1  Standard AC Interface Descriptor */
 static struct usb_interface_descriptor ac_interface_desc = {
@@ -83,7 +88,9 @@ static struct uac1_ac_header_descriptor_2 ac_header_desc = {
 	.baInterfaceNr = {
 	/* Interface number of the AudioStream interfaces */
 		[0] =		1,
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 		[1] =		2,
+#endif
 	}
 };
 
@@ -122,6 +129,7 @@ static struct uac1_output_terminal_descriptor io_out_ot_desc = {
 	.bSourceID		= USB_OUT_FU_ID,
 };
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 #define IO_IN_IT_ID	4
 static struct uac_input_terminal_descriptor io_in_it_desc = {
 	.bLength		= UAC_DT_INPUT_TERMINAL_SIZE,
@@ -143,6 +151,7 @@ static struct uac1_output_terminal_descriptor usb_in_ot_desc = {
 	.bAssocTerminal =	0,
 	.bSourceID =		IO_IN_IT_ID,
 };
+#endif
 
 /* B.4.1  Standard AS Interface Descriptor */
 static struct usb_interface_descriptor as_out_interface_alt_0_desc = {
@@ -163,6 +172,7 @@ static struct usb_interface_descriptor as_out_interface_alt_1_desc = {
 	.bInterfaceSubClass =	USB_SUBCLASS_AUDIOSTREAMING,
 };
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 static struct usb_interface_descriptor as_in_interface_alt_0_desc = {
 	.bLength =		USB_DT_INTERFACE_SIZE,
 	.bDescriptorType =	USB_DT_INTERFACE,
@@ -180,6 +190,7 @@ static struct usb_interface_descriptor as_in_interface_alt_1_desc = {
 	.bInterfaceClass =	USB_CLASS_AUDIO,
 	.bInterfaceSubClass =	USB_SUBCLASS_AUDIOSTREAMING,
 };
+#endif
 
 /* B.4.2  Class-Specific AS Interface Descriptor */
 static struct uac1_as_header_descriptor as_out_header_desc = {
@@ -191,6 +202,7 @@ static struct uac1_as_header_descriptor as_out_header_desc = {
 	.wFormatTag =		cpu_to_le16(UAC_FORMAT_TYPE_I_PCM),
 };
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 static struct uac1_as_header_descriptor as_in_header_desc = {
 	.bLength =		UAC_DT_AS_HEADER_SIZE,
 	.bDescriptorType =	USB_DT_CS_INTERFACE,
@@ -199,6 +211,7 @@ static struct uac1_as_header_descriptor as_in_header_desc = {
 	.bDelay =		1,
 	.wFormatTag =		cpu_to_le16(UAC_FORMAT_TYPE_I_PCM),
 };
+#endif
 
 DECLARE_UAC_FORMAT_TYPE_I_DISCRETE_DESC(UAC_MAX_RATES);
 #define uac_format_type_i_discrete_descriptor \
@@ -235,6 +248,7 @@ static struct uac_iso_endpoint_descriptor as_iso_out_desc = {
 	.wLockDelay =		cpu_to_le16(1),
 };
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 static struct uac_format_type_i_discrete_descriptor as_in_type_i_desc = {
 	.bLength =		0, /* filled on rate setup */
 	.bDescriptorType =	USB_DT_CS_INTERFACE,
@@ -265,6 +279,7 @@ static struct uac_iso_endpoint_descriptor as_iso_in_desc = {
 	.bLockDelayUnits =	0,
 	.wLockDelay =		0,
 };
+#endif
 
 static struct usb_descriptor_header *f_audio_desc[] = {
 	(struct usb_descriptor_header *)&ac_interface_desc,
@@ -273,8 +288,10 @@ static struct usb_descriptor_header *f_audio_desc[] = {
 	(struct usb_descriptor_header *)&usb_out_it_desc,
 	(struct usb_descriptor_header *)&usb_out_fu_desc,
 	(struct usb_descriptor_header *)&io_out_ot_desc,
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 	(struct usb_descriptor_header *)&io_in_it_desc,
 	(struct usb_descriptor_header *)&usb_in_ot_desc,
+#endif
 	(struct usb_descriptor_header *)&ac_interrupt_desc,
 
 	(struct usb_descriptor_header *)&as_out_interface_alt_0_desc,
@@ -286,6 +303,7 @@ static struct usb_descriptor_header *f_audio_desc[] = {
 	(struct usb_descriptor_header *)&as_out_ep_desc,
 	(struct usb_descriptor_header *)&as_iso_out_desc,
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 	(struct usb_descriptor_header *)&as_in_interface_alt_0_desc,
 	(struct usb_descriptor_header *)&as_in_interface_alt_1_desc,
 	(struct usb_descriptor_header *)&as_in_header_desc,
@@ -294,6 +312,7 @@ static struct usb_descriptor_header *f_audio_desc[] = {
 
 	(struct usb_descriptor_header *)&as_in_ep_desc,
 	(struct usb_descriptor_header *)&as_iso_in_desc,
+#endif
 	NULL,
 };
 
@@ -824,11 +843,13 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	io_out_ot_desc.iTerminal = us[STR_IO_OUT_OT].id;
 	as_out_interface_alt_0_desc.iInterface = us[STR_AS_OUT_IF_ALT0].id;
 	as_out_interface_alt_1_desc.iInterface = us[STR_AS_OUT_IF_ALT1].id;
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 	io_in_it_desc.iTerminal = us[STR_IO_IN_IT].id;
 	io_in_it_desc.iChannelNames = us[STR_IO_IN_IT_CH_NAMES].id;
 	usb_in_ot_desc.iTerminal = us[STR_USB_IN_OT].id;
 	as_in_interface_alt_0_desc.iInterface = us[STR_AS_IN_IF_ALT0].id;
 	as_in_interface_alt_1_desc.iInterface = us[STR_AS_IN_IF_ALT1].id;
+#endif
 
 	/* Set channel numbers */
 	usb_out_it_desc.bNrChannels = num_channels(audio_opts->c_chmask);
@@ -836,11 +857,13 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	as_out_type_i_desc.bNrChannels = num_channels(audio_opts->c_chmask);
 	as_out_type_i_desc.bSubframeSize = audio_opts->c_ssize;
 	as_out_type_i_desc.bBitResolution = audio_opts->c_ssize * 8;
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 	io_in_it_desc.bNrChannels = num_channels(audio_opts->p_chmask);
 	io_in_it_desc.wChannelConfig = cpu_to_le16(audio_opts->p_chmask);
 	as_in_type_i_desc.bNrChannels = num_channels(audio_opts->p_chmask);
 	as_in_type_i_desc.bSubframeSize = audio_opts->p_ssize;
 	as_in_type_i_desc.bBitResolution = audio_opts->p_ssize * 8;
+#endif
 
 	/* Set sample rates */
 	for (i = 0, idx = 0; i < UAC_MAX_RATES; i++)
@@ -850,12 +873,14 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	as_out_type_i_desc.bLength = UAC_FORMAT_TYPE_I_DISCRETE_DESC_SIZE(idx);
 	as_out_type_i_desc.bSamFreqType = idx;
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 	for (i = 0, idx = 0; i < UAC_MAX_RATES; i++)
 		if (audio_opts->p_srate[i] != 0)
 			memcpy(as_in_type_i_desc.tSamFreq[idx++],
 					&audio_opts->p_srate[i], 3);
 	as_in_type_i_desc.bLength = UAC_FORMAT_TYPE_I_DISCRETE_DESC_SIZE(idx);
 	as_in_type_i_desc.bSamFreqType = idx;
+#endif
 
 	/* allocate instance-specific interface IDs, and patch descriptors */
 	status = usb_interface_id(c, f);
@@ -873,6 +898,7 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	uac1->as_out_intf = status;
 	uac1->as_out_alt = 0;
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 	status = usb_interface_id(c, f);
 	if (status < 0)
 		goto fail;
@@ -880,6 +906,7 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	as_in_interface_alt_1_desc.bInterfaceNumber = status;
 	uac1->as_in_intf = status;
 	uac1->as_in_alt = 0;
+#endif
 
 	audio->gadget = gadget;
 
@@ -893,12 +920,14 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	audio->out_ep->desc = &as_out_ep_desc;
 	audio->out_ep->driver_data = f;
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 	ep = usb_ep_autoconfig(cdev->gadget, &as_in_ep_desc);
 	if (!ep)
 		goto fail;
 	audio->in_ep = ep;
 	audio->in_ep->desc = &as_in_ep_desc;
 	audio->in_ep->driver_data = f;
+#endif
 
 	ep = usb_ep_autoconfig(cdev->gadget, &ac_interrupt_desc);
 	if (!ep)
@@ -915,7 +944,9 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 		goto fail;
 
 	audio->out_ep_maxpsize = le16_to_cpu(as_out_ep_desc.wMaxPacketSize);
+#ifdef CONFIG_USB_CONFIGFS_F_UAC1_CAPTURE
 	audio->in_ep_maxpsize = le16_to_cpu(as_in_ep_desc.wMaxPacketSize);
+#endif
 	audio->params.c_chmask = audio_opts->c_chmask;
 	memcpy(audio->params.c_srate, audio_opts->c_srate,
 			sizeof(audio->params.c_srate));
