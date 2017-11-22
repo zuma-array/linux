@@ -68,7 +68,7 @@ enum {
 };
 
 static struct usb_string strings_fn[] = {
-	[STR_ASSOC].s = "Source/Sink",
+	[STR_ASSOC].s = "USB Audio Speaker",
 	[STR_IF_CTRL].s = "Topology Control",
 	[STR_CLKSRC_IN].s = "Input clock",
 	[STR_CLKSRC_OUT].s = "Output clock",
@@ -77,10 +77,10 @@ static struct usb_string strings_fn[] = {
 	[STR_VOL_FU].s = "Volume",
 	[STR_USB_OT].s = "USBH In",
 	[STR_IO_OT].s = "USBD In",
-	[STR_AS_OUT_ALT0].s = "Playback Inactive",
-	[STR_AS_OUT_ALT1].s = "Playback Active",
-	[STR_AS_IN_ALT0].s = "Capture Inactive",
-	[STR_AS_IN_ALT1].s = "Capture Active",
+	[STR_AS_OUT_ALT0].s = "USB Audio Speaker",
+	[STR_AS_OUT_ALT1].s = "USB Audio Speaker",
+	[STR_AS_IN_ALT0].s = "USB Audio Source",
+	[STR_AS_IN_ALT1].s = "USB Audio Source",
 	{ },
 };
 

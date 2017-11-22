@@ -313,18 +313,18 @@ enum {
 };
 
 static struct usb_string strings_uac1[] = {
-	[STR_AC_IF].s = "AC Interface",
+	[STR_AC_IF].s = "USB Audio Speaker",
 	[STR_USB_OUT_IT].s = "Playback Input terminal",
 	[STR_USB_OUT_IT_CH_NAMES].s = "Playback Channels",
 	[STR_USB_OUT_FU].s = "Playback Volume",
-	[STR_IO_OUT_OT].s = "Playback Output terminal",
-	[STR_IO_IN_IT].s = "Capture Input terminal",
+	[STR_IO_OUT_OT].s = "USB Audio Speaker",
+	[STR_IO_IN_IT].s = "USB Audio Source",
 	[STR_IO_IN_IT_CH_NAMES].s = "Capture Channels",
 	[STR_USB_IN_OT].s = "Capture Output terminal",
-	[STR_AS_OUT_IF_ALT0].s = "Playback Inactive",
-	[STR_AS_OUT_IF_ALT1].s = "Playback Active",
-	[STR_AS_IN_IF_ALT0].s = "Capture Inactive",
-	[STR_AS_IN_IF_ALT1].s = "Capture Active",
+	[STR_AS_OUT_IF_ALT0].s = "USB Audio Speaker",
+	[STR_AS_OUT_IF_ALT1].s = "USB Audio Speaker",
+	[STR_AS_IN_IF_ALT0].s = "USB Audio Source",
+	[STR_AS_IN_IF_ALT1].s = "USB Audio Source",
 	{ },
 };
 
