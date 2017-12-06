@@ -1732,6 +1732,13 @@ static void binder_transaction(struct binder_proc *proc,
 		binder_pop_transaction(target_thread, in_reply_to);
 	} else if (!(t->flags & TF_ONE_WAY)) {
 		BUG_ON(t->buffer->async_transaction != 0);
+#ifdef CONFIG_AMLOGIC_MODIFY
+#define B_PACK_CHARS(c1, c2, c3, c4) \
+		    ((((c1)<<24)) | (((c2)<<16)) | (((c3)<<8)) | (c4))
+		if (!tr->target.handle &&
+				t->code == B_PACK_CHARS('_', 'P', 'N', 'G'))
+			binder_enqueue_thread_work_ilocked(thread, tcomplete);
+#endif
 		t->need_reply = 1;
 		t->from_parent = thread->transaction_stack;
 		thread->transaction_stack = t;
