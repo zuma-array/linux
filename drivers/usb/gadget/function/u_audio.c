@@ -594,6 +594,7 @@ int u_audio_start_capture(struct g_audio *audio_dev)
 	struct usb_ep *ep;
 	struct uac_rtd_params *prm;
 	struct uac_params *params = &audio_dev->params;
+	struct snd_kcontrol *ctl = u_audio_get_ctl(audio_dev, CAPTURE_RATE);
 	int req_len, i;
 
 	ep = audio_dev->out_ep;
@@ -624,6 +625,8 @@ int u_audio_start_capture(struct g_audio *audio_dev)
 			dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 	}
 
+	snd_ctl_notify(audio_dev->uac->card,
+			SNDRV_CTL_EVENT_MASK_VALUE, &ctl->id);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(u_audio_start_capture);
