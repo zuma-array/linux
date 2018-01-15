@@ -7519,6 +7519,10 @@ bool is_pageblock_removable_nolock(struct page *page)
 
 #if (defined(CONFIG_MEMORY_ISOLATION) && defined(CONFIG_COMPACTION)) || defined(CONFIG_CMA)
 
+#ifdef CONFIG_AMLOGIC_MODIFY
+#define cma_debug	pr_debug
+#endif /* CONFIG_AMLOGIC_MODIFY */
+
 static unsigned long pfn_max_align_down(unsigned long pfn)
 {
 	return pfn & ~(max_t(unsigned long, MAX_ORDER_NR_PAGES,
@@ -7547,7 +7551,8 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 		if (fatal_signal_pending(current)) {
 			ret = -EINTR;
 		#ifdef CONFIG_AMLOGIC_MODIFY /* for debug */
-			pr_err("cma %s %d, ret:%d\n", __func__, __LINE__, ret);
+			cma_debug("cma %s %d, ret:%d\n",
+				__func__, __LINE__, ret);
 		#endif /* CONFIG_AMLOGIC_MODIFY */
 			break;
 		}
@@ -7558,7 +7563,7 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 			if (!pfn) {
 				ret = -EINTR;
 			#ifdef CONFIG_AMLOGIC_MODIFY /* for debug */
-				pr_err("cma %s %d, ret:%d\n",
+				cma_debug("cma %s %d, ret:%d\n",
 					__func__, __LINE__, ret);
 			#endif /* CONFIG_AMLOGIC_MODIFY */
 				break;
@@ -7567,7 +7572,8 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 		} else if (++tries == 5) {
 			ret = ret < 0 ? ret : -EBUSY;
 		#ifdef CONFIG_AMLOGIC_MODIFY /* for debug */
-			pr_err("cma %s %d, ret:%d\n", __func__, __LINE__, ret);
+			cma_debug("cma %s %d, ret:%d\n",
+				__func__, __LINE__, ret);
 		#endif /* CONFIG_AMLOGIC_MODIFY */
 			break;
 		}
@@ -7582,7 +7588,7 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 	if (ret < 0) {
 		putback_movable_pages(&cc->migratepages);
 	#ifdef CONFIG_AMLOGIC_MODIFY /* for debug */
-		pr_err("cma %s %d, ret:%d\n", __func__, __LINE__, ret);
+		cma_debug("cma %s %d, ret:%d\n", __func__, __LINE__, ret);
 	#endif /* CONFIG_AMLOGIC_MODIFY */
 		return ret;
 	}
@@ -7630,7 +7636,7 @@ static void cma_boost_work_func(struct work_struct *work)
 		atomic_add(BOOST_BUSY, ok); /* tell caller busy */
 
 	if (ret) {
-		pr_err("%s, failed, ret:%d, ok:%d\n",
+		cma_debug("%s, failed, ret:%d, ok:%d\n",
 			__func__, ret, atomic_read(ok));
 	}
 }
@@ -7676,7 +7682,7 @@ int alloc_contig_boost(unsigned long start_pfn, unsigned long count)
 		ret = -EINVAL;
 
 	if (ret) {
-		pr_err("%s, failed, ret:%d, ok:%d\n",
+		cma_debug("%s, failed, ret:%d, ok:%d\n",
 			__func__, ret, atomic_read(&ok));
 	}
 
@@ -7754,7 +7760,7 @@ int alloc_contig_range(unsigned long start, unsigned long end,
 				       false);
 #ifdef CONFIG_AMLOGIC_MODIFY
 	if (ret) { /* for debug */
-		pr_err("cma %s %d, ret:%d\n", __func__, __LINE__, ret);
+		cma_debug("cma %s %d, ret:%d\n", __func__, __LINE__, ret);
 		return ret;
 	}
 #else
@@ -7843,7 +7849,7 @@ int alloc_contig_range(unsigned long start, unsigned long end,
 
 	/* Make sure the range is really isolated. */
 	if (test_pages_isolated(outer_start, end, false)) {
-		pr_debug("%s: [%lx, %lx) PFNs busy\n",
+		cma_debug("%s: [%lx, %lx) PFNs busy\n",
 			__func__, outer_start, end);
 		ret = -EBUSY;
 		goto done;
@@ -7854,7 +7860,7 @@ int alloc_contig_range(unsigned long start, unsigned long end,
 	if (!outer_end) {
 		ret = -EBUSY;
 	#ifdef CONFIG_AMLOGIC_MODIFY
-		pr_err("cma %s %d, ret:%d\n", __func__, __LINE__, ret);
+		cma_debug("cma %s %d, ret:%d\n", __func__, __LINE__, ret);
 	#endif /* CONFIG_AMLOGIC_MODIFY */
 		goto done;
 	}
@@ -7885,7 +7891,7 @@ void free_contig_range(unsigned long pfn, unsigned nr_pages)
 		page = pfn_to_page(pfn);
 		batch = (1 << start_order);
 		free_order = __free_pages_cma(page, start_order, &count);
-		pr_debug("pages:%4d, free:%2d, start:%2d, batch:%4d, pfn:%ld\n",
+		cma_debug("pages:%4d, free:%2d, start:%2d, batch:%4d, pfn:%ld\n",
 			nr_pages, free_order,
 			start_order, batch, pfn);
 		nr_pages -= batch;
