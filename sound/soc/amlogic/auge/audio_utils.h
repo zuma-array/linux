@@ -146,4 +146,10 @@ extern int loopback_trigger(
 	int cmd,
 	struct loopback_cfg *lb_cfg);
 
+extern int aud_pwr_detect_set_threshold_hi(unsigned int h);
+extern int aud_pwr_detect_set_threshold_lo(unsigned int l);
+extern int aud_toddr_conf_start(unsigned int id, unsigned int start);
+extern int aud_toddr_conf_end(unsigned int id, unsigned int end);
+extern unsigned int aud_toddr_fetch_start(unsigned int id);
+extern unsigned int aud_toddr_fetch_posi(unsigned int id);
 #endif

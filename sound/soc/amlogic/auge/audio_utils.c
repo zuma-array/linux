@@ -1226,3 +1226,48 @@ int loopback_check_enable(int src)
 		&& (loopback_datain == src)
 		&& (loopback_enable == 1);
 }
+
+int aud_pwr_detect_set_threshold_hi(unsigned int h)
+{
+	audiobus_write(EE_AUDIO_POW_DET_TH_HI, h);
+	return 0;
+}
+
+int aud_pwr_detect_set_threshold_lo(unsigned int l)
+{
+	audiobus_write(EE_AUDIO_POW_DET_TH_LO, l);
+	return 0;
+}
+
+int aud_toddr_conf_start(unsigned int id, unsigned int start)
+{
+	if (id > 3)
+		return -1;
+	audiobus_write(EE_AUDIO_TODDR_A_START_ADDR + id*0x10, start);
+	return 0;
+}
+
+int aud_toddr_conf_end(unsigned int id, unsigned int end)
+{
+	if (id > 3)
+		return -1;
+	audiobus_write(EE_AUDIO_TODDR_A_FINISH_ADDR + id*0x10, end);
+	return 0;
+}
+
+unsigned int aud_toddr_fetch_start(unsigned int id)
+{
+	if (id > 3)
+		return 0;
+	return (unsigned int)audiobus_read(EE_AUDIO_TODDR_A_START_ADDR
+			+ id*0x10);
+}
+
+unsigned int aud_toddr_fetch_posi(unsigned int id)
+{
+	if (id > 3)
+		return 0;
+	return (unsigned int)audiobus_read(EE_AUDIO_TODDR_A_STATUS2
+			+ id*0x10);
+}
+
