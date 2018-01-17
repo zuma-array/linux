@@ -15,15 +15,21 @@
  *
  */
 
+#include <linux/cdev.h>
 #include <linux/kernel.h>
 #include <linux/dma-mapping.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/io.h>
+#include <linux/mm.h>
 #include <linux/of_device.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/gpio/consumer.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/cma.h>
+#include <linux/dma-contiguous.h>
 
 #include <sound/soc.h>
 #include <sound/tlv.h>
@@ -34,6 +40,18 @@
 #include "iomap.h"
 #include "regs.h"
 #include "ddr_mngr.h"
+#include "audio_utils.h"
+
+static size_t pdm_paddr_base;
+static size_t pdm_paddr_size;
+static size_t pdm_toaddr_cur;
+static size_t pdm_toaddr_off = 1024*1024;
+static size_t pdm_readaddr_idx;
+static size_t pdm_endddr_bak;
+static char *reserved_vbuf;
+static int s_pdm_wake_sys;
+module_param(s_pdm_wake_sys, int, 0644);
+MODULE_PARM_DESC(s_pdm_wake_sys, "pwr detect wake sys");
 
 static struct snd_pcm_hardware aml_pdm_hardware = {
 	.info			=
@@ -163,6 +181,48 @@ static int pdm_dclk_set_enum(
 	return 0;
 }
 
+static unsigned int pdm_pwr_thr_hi = 0x70000;
+module_param(pdm_pwr_thr_hi, int, 0644);
+MODULE_PARM_DESC(pdm_pwr_thr_hi, "pwr thr hi");
+static unsigned int pdm_pwr_thr_lo = 0x16000;
+module_param(pdm_pwr_thr_lo, int, 0644);
+MODULE_PARM_DESC(pdm_pwr_thr_lo, "pwr thr lo");
+
+static int pdm_pwr_thr_hi_get(
+	struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.enumerated.item[0] = pdm_pwr_thr_hi;
+
+	return 0;
+}
+
+static int pdm_pwr_thr_hi_set(
+	struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	pdm_pwr_thr_hi = ucontrol->value.enumerated.item[0];
+
+	return 0;
+}
+
+static int pdm_pwr_thr_lo_get(
+	struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.enumerated.item[0] = pdm_pwr_thr_lo;
+
+	return 0;
+}
+
+static int pdm_pwr_thr_lo_set(
+	struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	pdm_pwr_thr_lo = ucontrol->value.enumerated.item[0];
+
+	return 0;
+}
 
 static const struct snd_kcontrol_new snd_pdm_controls[] = {
 	/* which set */
@@ -183,6 +243,14 @@ static const struct snd_kcontrol_new snd_pdm_controls[] = {
 		     pdm_dclk_get_enum,
 		     pdm_dclk_set_enum),
 
+	SOC_SINGLE_EXT("pdm pwr thr upper",
+		     0, 0, 0x7fffffff, 0,
+		     pdm_pwr_thr_hi_get,
+		     pdm_pwr_thr_hi_set),
+	SOC_SINGLE_EXT("pdm pwr thr low",
+		     0, 0, 0x7fffffff, 0,
+		     pdm_pwr_thr_lo_get,
+		     pdm_pwr_thr_lo_set),
 };
 
 static irqreturn_t aml_pdm_isr_handler(int irq, void *data)
@@ -237,7 +305,6 @@ static int aml_pdm_open(struct snd_pcm_substream *substream)
 	runtime->private_data = p_pdm;
 
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
-
 		p_pdm->tddr = aml_audio_register_toddr
 			(dev, p_pdm->actrl, aml_pdm_isr_handler, substream);
 		if (p_pdm->tddr == NULL) {
@@ -302,6 +369,7 @@ static int aml_pdm_prepare(
 		end_addr = start_addr + runtime->dma_bytes - 8;
 		int_addr = frames_to_bytes(runtime, runtime->period_size) / 8;
 
+		pdm_endddr_bak = end_addr;
 		aml_toddr_set_buf(to, start_addr, end_addr);
 		aml_toddr_set_intrpt(to, int_addr);
 	}
@@ -371,13 +439,22 @@ static int aml_pdm_pcm_new(struct snd_soc_pcm_runtime *soc_runtime)
 
 	/* only capture for PDM */
 	substream = pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream;
+	if (pdm_paddr_size > size)
+		size = pdm_paddr_size;
 	if (substream) {
 		ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV,
 					soc_runtime->platform->dev,
 					size, &substream->dma_buffer);
 		if (ret) {
-			dev_err(soc_runtime->dev, "Cannot allocate buffer(s)\n");
+			dev_err(soc_runtime->dev, "Cannot allocate buffer\n");
 			return ret;
+		} else if (pdm_paddr_size > 0) {
+			pr_info("%s dma.addr:0x%llx, dma.area:%p\n", __func__,
+					substream->dma_buffer.addr,
+					substream->dma_buffer.area);
+			reserved_vbuf = substream->dma_buffer.area;
+			if (reserved_vbuf == NULL)
+				pr_err("%s failed dma_alloc_cma\n", __func__);
 		}
 	}
 
@@ -552,7 +629,7 @@ static int aml_pdm_dai_trigger(
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
-			dev_info(substream->pcm->card->dev, "pdm capture enable\n");
+			dev_info(substream->pcm->card->dev, "pdm capture disable\n");
 			pdm_enable(0);
 			aml_toddr_enable(p_pdm->tddr, 0);
 		}
@@ -662,6 +739,84 @@ void aml_pdm_dai_shutdown(struct snd_pcm_substream *substream,
 	clk_disable_unprepare(p_pdm->clk_gate);
 }
 
+static ssize_t show_cur(struct class *cla,
+					  struct class_attribute *attr,
+						char *buf)
+{
+	ssize_t ret = sprintf(buf, "%lu", pdm_readaddr_idx);
+	return ret;
+}
+static struct class_attribute pdm_class_attrs[] = {
+	__ATTR(cur, 0500, show_cur, NULL),
+	__ATTR_NULL
+
+};
+
+static struct class pdm_class = {
+	.name = "pdm_da",
+	.class_attrs = pdm_class_attrs,
+};
+static int pdm_cdev_open(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static int pdm_cdev_release(struct inode *inode, struct file *file)
+{
+	pdm_readaddr_idx = 0;
+	return 0;
+}
+
+static ssize_t pdm_cdev_read(struct file *file, char __user *buf,
+	size_t count, loff_t *ppos)
+{
+	int ret = 0;
+	char *pbuf = reserved_vbuf;
+	unsigned int off = 0;
+
+	if (pdm_readaddr_idx == 0)
+		return 0;
+	if (pdm_readaddr_idx >= pdm_toaddr_cur) {
+		if (count > (pdm_paddr_base + pdm_paddr_size
+				- pdm_readaddr_idx))
+			count = pdm_paddr_base + pdm_paddr_size
+				- pdm_readaddr_idx;
+		off = pdm_readaddr_idx - pdm_paddr_base;
+		ret = copy_to_user((void *)buf, (void *)(pbuf + off), count);
+		if (ret) {
+			pr_err("%s cpy to user failed, count:%lu, idx:0x%lx\n",
+					__func__, count, pdm_readaddr_idx);
+			return 0;
+		}
+		pdm_readaddr_idx += count;
+		if (pdm_readaddr_idx >= (pdm_paddr_base + pdm_paddr_size))
+			pdm_readaddr_idx = pdm_paddr_base + pdm_toaddr_off;
+	} else {
+		if (count > pdm_toaddr_cur - pdm_readaddr_idx)
+			count = pdm_toaddr_cur - pdm_readaddr_idx;
+		off = pdm_readaddr_idx - pdm_paddr_base;
+		if (copy_to_user((void *)buf, (void *)(pbuf + off), count)) {
+			pr_err("%s cpy to user failed,count:%lu\n",
+					__func__, count);
+			return 0;
+		}
+		pdm_readaddr_idx += count;
+		if (pdm_readaddr_idx == pdm_toaddr_cur)
+			pdm_readaddr_idx = 0;
+	}
+
+	return count;
+}
+
+static dev_t pdm_devno;
+static struct cdev pdm_cdev;
+static const struct file_operations pdm_fops = {
+	.owner      = THIS_MODULE,
+	.open       = pdm_cdev_open,
+	.release    = pdm_cdev_release,
+	.read       = pdm_cdev_read,
+};
+
 static struct snd_soc_dai_ops aml_pdm_dai_ops = {
 	.set_fmt        = aml_pdm_dai_set_fmt,
 	.hw_params      = aml_pdm_dai_hw_params,
@@ -671,6 +826,40 @@ static struct snd_soc_dai_ops aml_pdm_dai_ops = {
 	.startup = aml_pdm_dai_startup,
 	.shutdown = aml_pdm_dai_shutdown,
 };
+
+static int pdm_cdev_init(struct platform_device *pdev)
+{
+	int ret = 0;
+	struct device *devp;
+
+	ret = alloc_chrdev_region(&pdm_devno, 0, 1, "pdm_da");
+	if (ret < 0) {
+		dev_err(&pdev->dev, "pdm: failed to allocate major number\n");
+		ret = -ENODEV;
+		goto out;
+	}
+	ret = class_register(&pdm_class);
+	if (ret)
+		goto out;
+	/* connect the file operations with cdev */
+	cdev_init(&pdm_cdev, &pdm_fops);
+	pdm_cdev.owner = THIS_MODULE;
+	/* connect the major/minor number to the cdev */
+	ret = cdev_add(&pdm_cdev, pdm_devno, 1);
+	if (ret) {
+		dev_err(&pdev->dev, "pdm: failed to add device\n");
+		goto out;
+	}
+	devp = device_create(&pdm_class, NULL, pdm_devno, NULL, "pdm_da");
+	if (IS_ERR(devp)) {
+		dev_err(&pdev->dev, "pdm: failed to create device node\n");
+		ret = PTR_ERR(devp);
+		goto out;
+	}
+	pr_info("%s done\n", __func__);
+out:
+	return ret;
+}
 
 struct snd_soc_dai_driver aml_pdm_dai[] = {
 	{
@@ -699,6 +888,10 @@ static int aml_pdm_platform_probe(struct platform_device *pdev)
 	struct platform_device *pdev_parent;
 	struct aml_audio_controller *actrl = NULL;
 	struct device *dev = &pdev->dev;
+	#ifdef CONFIG_CMA
+	struct cma *cma;
+	#endif
+	unsigned int thr_arr[2];
 
 	int ret;
 
@@ -709,6 +902,20 @@ static int aml_pdm_platform_probe(struct platform_device *pdev)
 		/*dev_err(&pdev->dev, "Can't allocate pcm_p\n");*/
 		ret = -ENOMEM;
 		goto err;
+	}
+	/* init reserved memory */
+	ret = of_reserved_mem_device_init(&pdev->dev);
+	if (ret != 0) {
+		pr_err("%s failed get reserved mem\n", __func__);
+	} else {
+		cma = dev_get_cma_area(&pdev->dev);
+		if (cma) {
+			pdm_paddr_base = cma_get_base(cma);
+			pdm_paddr_size = cma_get_size(cma);
+			pr_info("%s reserved memory base:%llx, size:%lx\n",
+				__func__, cma_get_base(cma), cma_get_size(cma));
+		} else
+			pr_info("%s no reserved mem in CMA\n", __func__);
 	}
 
 	/* get audio controller */
@@ -786,6 +993,7 @@ static int aml_pdm_platform_probe(struct platform_device *pdev)
 		goto err;
 	}
 
+	s_pdm_wake_sys = of_property_read_bool(node, "wake_sys");
 
 	ret = of_property_read_u32(node, "filter_mode",
 			&p_pdm->filter_mode);
@@ -796,6 +1004,13 @@ static int aml_pdm_platform_probe(struct platform_device *pdev)
 	s_pdm_filter_mode = p_pdm->filter_mode;
 	pr_info("%s pdm filter mode from dts:%d\n",
 		__func__, p_pdm->filter_mode);
+
+	ret = of_property_read_u32_array(node, "pwr_det_threshd",
+			thr_arr, 2);
+	if (!ret) {
+		pdm_pwr_thr_hi = thr_arr[0];
+		pdm_pwr_thr_lo = thr_arr[1];
+	}
 
 	p_pdm->dev = dev;
 	dev_set_drvdata(&pdev->dev, p_pdm);
@@ -816,6 +1031,7 @@ static int aml_pdm_platform_probe(struct platform_device *pdev)
 
 	pr_info("%s, register soc platform\n", __func__);
 
+	pdm_cdev_init(pdev);
 	return snd_soc_register_platform(&pdev->dev, &aml_soc_platform_pdm);
 
 err:
@@ -837,6 +1053,85 @@ static int aml_pdm_platform_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int aml_pdm_platform_suspend(struct platform_device *pdev,
+	pm_message_t state)
+{
+	struct aml_pdm *p_pdm = dev_get_drvdata(&pdev->dev);
+	unsigned int start_addr, end_addr;
+	int ret = 0;
+
+	if (!s_pdm_wake_sys)
+		return 0;
+
+	start_addr = pdm_paddr_base + pdm_toaddr_off;
+	end_addr = start_addr + pdm_paddr_size/2;
+
+	if (reserved_vbuf != NULL)
+		memset(reserved_vbuf + pdm_toaddr_off, 0, pdm_paddr_size/2);
+	else
+		return 0;
+
+	pr_info("%s enable all pdm clk\n", __func__);
+	/* enable clock gate */
+	ret = clk_prepare_enable(p_pdm->clk_gate);
+
+	/* enable clock */
+	ret = clk_prepare_enable(p_pdm->sysclk_srcpll);
+	if (ret) {
+		pr_err("Can't enable pcm sysclk_srcpll clock: %d\n", ret);
+		goto err;
+	}
+
+	ret = clk_prepare_enable(p_pdm->dclk_srcpll);
+	if (ret) {
+		pr_err("Can't enable pcm dclk_srcpll clock: %d\n", ret);
+		goto err;
+	}
+
+	ret = clk_prepare_enable(p_pdm->clk_pdm_sysclk);
+	if (ret) {
+		pr_err("Can't enable pcm clk_pdm_sysclk clock: %d\n", ret);
+		goto err;
+	}
+
+	ret = clk_prepare_enable(p_pdm->clk_pdm_dclk);
+	if (ret) {
+		pr_err("Can't enable pcm clk_pdm_dclk clock: %d\n", ret);
+		goto err;
+	}
+	aud_toddr_conf_start(0, start_addr);
+	aud_toddr_conf_end(0, end_addr);
+
+	aud_pwr_detect_set_threshold_hi(pdm_pwr_thr_hi);
+	aud_pwr_detect_set_threshold_lo(pdm_pwr_thr_lo);
+err:
+	return 0;
+}
+static int aml_pdm_platform_resume(struct platform_device *pdev)
+{
+	unsigned int start_addr;
+
+	if (!s_pdm_wake_sys)
+		return 0;
+
+	if (reserved_vbuf == NULL)
+		return 0;
+
+	start_addr = aud_toddr_fetch_start(0);
+	pdm_toaddr_cur = aud_toddr_fetch_posi(0);
+	pdm_readaddr_idx = pdm_toaddr_cur;
+	pr_info("%s start:0x%x, cur_addr :0x%lx\n",
+		__func__, start_addr, pdm_toaddr_cur);
+
+	pdm_enable(0);
+	if (pdm_endddr_bak == 0)
+		pdm_endddr_bak = start_addr + 4096;
+	aud_toddr_conf_start(0, pdm_paddr_base);
+	aud_toddr_conf_end(0, pdm_endddr_bak);
+	pdm_endddr_bak = 0;
+
+	return 0;
+}
 static const struct of_device_id aml_pdm_device_id[] = {
 	{ .compatible = "amlogic, snd-pdm" },
 	{}
@@ -850,6 +1145,8 @@ struct platform_driver aml_pdm_driver = {
 		.of_match_table = of_match_ptr(aml_pdm_device_id),
 	},
 	.probe = aml_pdm_platform_probe,
+	.suspend = aml_pdm_platform_suspend,
+	.resume  = aml_pdm_platform_resume,
 	.remove = aml_pdm_platform_remove,
 };
 module_platform_driver(aml_pdm_driver);
