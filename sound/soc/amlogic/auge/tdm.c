@@ -44,6 +44,9 @@
 #define TDM_C	2
 #define LANE_MAX 4
 
+#define MCLK_48k	(24576000UL)
+#define MCLK_44k1	(22579200UL)
+
 static void dump_pcm_setting(struct pcm_setting *setting)
 {
 	if (setting == NULL)
@@ -453,7 +456,6 @@ static int aml_dai_tdm_trigger(struct snd_pcm_substream *substream, int cmd,
 static int pcm_setting_init(struct pcm_setting *setting, unsigned int rate,
 			unsigned int channels)
 {
-	unsigned int ratio = 0;
 	setting->lrclk = rate;
 	setting->bclk_lrclk_ratio = setting->slots * setting->slot_width;
 	setting->bclk = setting->lrclk * setting->bclk_lrclk_ratio;
@@ -462,12 +464,13 @@ static int pcm_setting_init(struct pcm_setting *setting, unsigned int rate,
 	if (setting->pcm_mode == SND_SOC_DAIFMT_DSP_A ||
 		setting->pcm_mode == SND_SOC_DAIFMT_DSP_B) {
 		/* for some TDM codec, mclk limites */
-		ratio = 2;
+		setting->sysclk_bclk_ratio = 2;
+		setting->sysclk = setting->sysclk_bclk_ratio * setting->bclk;
 	} else {
-		ratio = 4;
+		/* Always use one of the main MCLK rates and calculate ratio */
+		setting->sysclk = ((rate % 8000) == 0) ? MCLK_48k : MCLK_44k1;
+		setting->sysclk_bclk_ratio = setting->sysclk / setting->bclk;
 	}
-	setting->sysclk_bclk_ratio = ratio;
-	setting->sysclk = ratio * setting->bclk;
 
 	return 0;
 }
