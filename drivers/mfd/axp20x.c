@@ -1024,12 +1024,14 @@ int axp20x_device_probe(struct axp20x_dev *axp20x)
 				     AXP806_REG_ADDR_EXT_ADDR_SLAVE_MODE);
 	}
 
-	ret = regmap_add_irq_chip(axp20x->regmap, axp20x->irq,
-			  IRQF_ONESHOT | IRQF_SHARED | axp20x->irq_flags,
-			   -1, axp20x->regmap_irq_chip, &axp20x->regmap_irqc);
-	if (ret) {
-		dev_err(axp20x->dev, "failed to add irq chip: %d\n", ret);
-		return ret;
+	if (axp20x->irq != -1) {
+		ret = regmap_add_irq_chip(axp20x->regmap, axp20x->irq,
+				  IRQF_ONESHOT | IRQF_SHARED | axp20x->irq_flags,
+				   -1, axp20x->regmap_irq_chip, &axp20x->regmap_irqc);
+		if (ret) {
+			dev_err(axp20x->dev, "failed to add irq chip: %d\n", ret);
+			return ret;
+		}
 	}
 
 	ret = mfd_add_devices(axp20x->dev, -1, axp20x->cells,
@@ -1037,7 +1039,10 @@ int axp20x_device_probe(struct axp20x_dev *axp20x)
 
 	if (ret) {
 		dev_err(axp20x->dev, "failed to add MFD devices: %d\n", ret);
-		regmap_del_irq_chip(axp20x->irq, axp20x->regmap_irqc);
+
+		if (axp20x->irq != -1)
+			regmap_del_irq_chip(axp20x->irq, axp20x->regmap_irqc);
+
 		return ret;
 	}
 
@@ -1060,7 +1065,9 @@ int axp20x_device_remove(struct axp20x_dev *axp20x)
 	}
 
 	mfd_remove_devices(axp20x->dev);
-	regmap_del_irq_chip(axp20x->irq, axp20x->regmap_irqc);
+
+	if (axp20x->irq != -1)
+		regmap_del_irq_chip(axp20x->irq, axp20x->regmap_irqc);
 
 	return 0;
 }
