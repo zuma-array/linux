@@ -17,6 +17,7 @@ Required properties:
 - interrupts: SoC NMI / GPIO interrupt connected to the PMIC's IRQ pin
 - interrupt-controller: The PMIC has its own internal IRQs
 - #interrupt-cells: Should be set to 1
+- no-irq: Specify when the IRQ line is not connected to any GPIO
 
 Optional properties:
 - x-powers,dcdc-freq: defines the work frequency of DC-DC in KHz
