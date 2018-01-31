@@ -168,6 +168,7 @@
 	pmic: axp152@32 {
 		compatible = "x-powers,axp152";
 		reg = <0x32>;
+		no-irq;
 
 		regulators {
 			vdd_arm: dcdc4 {
