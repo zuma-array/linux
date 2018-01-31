@@ -667,11 +667,17 @@ static int axp20x_i2c_probe(struct i2c_client *i2c,
 			 const struct i2c_device_id *id)
 {
 	struct axp20x_dev *axp20x;
+	struct device_node *np = i2c->dev.of_node;
 	int ret;
 
 	axp20x = devm_kzalloc(&i2c->dev, sizeof(*axp20x), GFP_KERNEL);
 	if (!axp20x)
 		return -ENOMEM;
+
+	if (of_property_read_bool(np, "no-irq"))
+		axp20x->irq = -1;
+	else
+		axp20x->irq = i2c->irq;
 
 	ret = axp20x_match_device(axp20x, &i2c->dev);
 	if (ret)
@@ -688,12 +694,15 @@ static int axp20x_i2c_probe(struct i2c_client *i2c,
 		return ret;
 	}
 
-	ret = regmap_add_irq_chip(axp20x->regmap, i2c->irq,
-				  IRQF_ONESHOT | IRQF_SHARED, -1,
-				  axp20x->regmap_irq_chip,
-				  &axp20x->regmap_irqc);
-	if (ret) {
-		dev_warn(&i2c->dev, "failed to add irq chip: %d\n", ret);
+	if (axp20x->irq != -1) {
+		ret = regmap_add_irq_chip(axp20x->regmap, axp20x->irq,
+					  IRQF_ONESHOT | IRQF_SHARED, -1,
+					  axp20x->regmap_irq_chip,
+					  &axp20x->regmap_irqc);
+		if (ret) {
+			dev_err(&i2c->dev, "failed to add irq chip: %d\n", ret);
+			return ret;
+		}
 	}
 
 	ret = mfd_add_devices(axp20x->dev, -1, axp20x->cells,
@@ -701,7 +710,10 @@ static int axp20x_i2c_probe(struct i2c_client *i2c,
 
 	if (ret) {
 		dev_err(&i2c->dev, "failed to add MFD devices: %d\n", ret);
-		regmap_del_irq_chip(i2c->irq, axp20x->regmap_irqc);
+
+		if (axp20x->irq != -1)
+			regmap_del_irq_chip(axp20x->irq, axp20x->regmap_irqc);
+
 		return ret;
 	}
 
@@ -725,7 +737,9 @@ static int axp20x_i2c_remove(struct i2c_client *i2c)
 	}
 
 	mfd_remove_devices(axp20x->dev);
-	regmap_del_irq_chip(axp20x->i2c_client->irq, axp20x->regmap_irqc);
+
+	if (axp20x->irq != -1)
+		regmap_del_irq_chip(axp20x->irq, axp20x->regmap_irqc);
 
 	return 0;
 }

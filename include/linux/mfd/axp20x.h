@@ -416,6 +416,7 @@ struct axp20x_dev {
 	struct mfd_cell                 *cells;
 	const struct regmap_config	*regmap_cfg;
 	const struct regmap_irq_chip	*regmap_irq_chip;
+	int				irq;
 };
 
 #define BATTID_LEN				64

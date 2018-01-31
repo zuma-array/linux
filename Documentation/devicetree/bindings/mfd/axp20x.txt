@@ -13,6 +13,8 @@ Required properties:
 - #interrupt-cells: Should be set to 1
 
 Optional properties:
+- no-irq: Specify when the IRQ line is not connected to any GPIO
+
 - x-powers,dcdc-freq: defines the work frequency of DC-DC in KHz
 		      (range: 750-1875). Default: 1.5MHz
 - <input>-supply: a phandle to the regulator supply node. May be omitted if
