@@ -49,6 +49,7 @@
 			alignment = <0x0 0x400000>;
 			alloc-ranges = <0x0 0x05000000 0x0 0x400000>;
 		};
+		/* pdm suspend & resume
 		pdm_reserved:linux,pdm {
 			compatible = "shared-dma-pool";
 			reusable;
@@ -56,6 +57,7 @@
 			alignment = <0x0 0x400000>;
 			alloc-ranges = <0x0 0x05400000 0x0 0x400000>;
 		};
+		*/
 		secos_reserved:linux,secos {
 			status = "disable";
 			compatible = "amlogic, aml_secos_memory";
@@ -978,10 +980,14 @@
 			"pdm_sysclk";
 		pinctrl-names = "pdm_pins";
 		pinctrl-0 = <&pdmin>;
+		/* pdm suspend & resume
 		memory-region = <&pdm_reserved>;
+		*/
 		filter_mode = <1>; /* mode 0~4, defalut:1 */
+		/* pdm suspend & resume
 		pwr_det_threshd = <0x80000 0x17000>;
 		wake_sys;
+		*/
 		status = "okay";
 	};
 
