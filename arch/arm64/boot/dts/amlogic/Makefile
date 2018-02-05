@@ -1,3 +1,4 @@
+dtb-y += axg_sue_s1832.dtb
 
 targets += dtbs
 
@@ -11,4 +12,5 @@ targets += $(DTB_LIST)
 
 dtbs: $(addprefix $(obj)/, $(DTB_LIST))
 
+always := $(dtb-y)
 clean-files := *.dtb
