@@ -159,7 +159,7 @@
 };
 
 &sai1 {
-	pinctrl-0 = <&pinctrl_sai1_he>;
+	pinctrl-0 = <&pinctrl_sai1_he &pinctrl_sai1_mclk>;
 	fsl,sai-asynchronous;
 	sue,pdm-sync-slave = <&sai3>;
 	/* Set a higher initial SAI clock to enable 384 kHz playback */
