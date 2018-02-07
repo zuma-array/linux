@@ -7,7 +7,7 @@
 ## Do not change.
 ##########################################
 
-KBUILD_CFLAGS += -Wlarger-than=28792
+KBUILD_CFLAGS += -Wlarger-than=28840
 KBUILD_CFLAGS += -Wstack-usage=1856
 
 # These 2 marked sentence is just for generate warning messages
