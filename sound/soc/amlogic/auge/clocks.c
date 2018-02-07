@@ -27,7 +27,7 @@
 
 #define DRV_NAME "aml-audio-clocks"
 
-spinlock_t aclk_lock;
+DEFINE_SPINLOCK(aclk_lock);
 
 #define CLOCK_GATE(_name, _reg, _bit) \
 struct clk_gate _name = { \
