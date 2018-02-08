@@ -902,7 +902,7 @@ int loopback_parse_of(struct device_node *node,
 
 	pdev = of_find_device_by_node(node);
 	if (!pdev) {
-		dev_err(&pdev->dev, "failed to find platform device\n");
+		pr_err("%s failed to find platform device for %s\n", __func__, node->name);
 		ret = -EINVAL;
 		goto fail;
 	}
