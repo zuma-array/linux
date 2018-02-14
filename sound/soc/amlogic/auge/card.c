@@ -721,7 +721,7 @@ static int aml_card_parse_gpios(struct device_node *node,
 	enum of_gpio_flags flags;
 	int gpio;
 	bool active_low;
-	int ret;
+	int ret = 0;
 
 	gpio = of_get_named_gpio_flags(node, "spk_mute", 0, &flags);
 	priv->spk_mute_gpio = gpio;
@@ -739,7 +739,7 @@ static int aml_card_parse_gpios(struct device_node *node,
 					ARRAY_SIZE(card_controls));
 	}
 
-	return 0;
+	return ret;
 }
 
 static int aml_card_parse_of(struct device_node *node,
