@@ -49,19 +49,19 @@
 		};
 		opp1GHz: opp@1000000000 {
 			opp-hz = /bits/ 64 <1000000000>;
-			opp-microvolt = <950000>;
+			opp-microvolt = <975000>;
 		};
 		opp1_2GHz: opp@1200000000 {
 			opp-hz = /bits/ 64 <1200000000>;
-			opp-microvolt = <975000>;
+			opp-microvolt = <1000000>;
 		};
 		opp1_3GHz: opp@1296000000 {
 			opp-hz = /bits/ 64 <1296000000>;
-			opp-microvolt = <1025000>;
+			opp-microvolt = <1050000>;
 		};
 		opp1_4GHz: opp@1416000000 {
 			opp-hz = /bits/ 64 <1416000000>;
-			opp-microvolt = <1075000>;
+			opp-microvolt = <1100000>;
 		};
 	};
 
