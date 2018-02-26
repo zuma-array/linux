@@ -800,10 +800,10 @@ static void fsl_sai_shutdown(struct snd_pcm_substream *substream,
 	}
 
 	if (sai->is_stream_opened[tx]) {
-		regmap_update_bits(sai->regmap, FSL_SAI_xCR3(tx), FSL_SAI_CR3_TRCE, 0);
-
-		if (!sai->continuous_clock)
+		if (!sai->continuous_clock) {
+			regmap_update_bits(sai->regmap, FSL_SAI_xCR3(tx), FSL_SAI_CR3_TRCE, 0);
 			clk_disable_unprepare(sai->bus_clk);
+		}
 
 		sai->is_stream_opened[tx] = false;
 		pm_runtime_put_sync(cpu_dai->dev);
