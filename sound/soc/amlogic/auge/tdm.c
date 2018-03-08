@@ -81,6 +81,8 @@ struct aml_tdm {
 	unsigned int clk_sel;
 	struct toddr *tddr;
 	struct frddr *fddr;
+	s32 drift_comp_value;
+	u32 sysclk_nominal;
 };
 
 static const struct snd_pcm_hardware aml_tdm_hardware = {
@@ -624,9 +626,19 @@ static int aml_dai_set_tdm_sysclk(struct snd_soc_dai *cpu_dai,
 {
 	struct aml_tdm *p_tdm = snd_soc_dai_get_drvdata(cpu_dai);
 	unsigned int ratio = aml_mpll_mclk_ratio(freq);
+	int sign;
+	unsigned int comp;
 
-	pr_info("aml_dai_set_tdm_sysclk freq(%d), mpll/mclk(%d)\n",
-		freq, ratio);
+	/* save nominal sysclk for drift_comp calculation */
+	p_tdm->sysclk_nominal = freq;
+
+	sign = (p_tdm->drift_comp_value < 0) ? -1 : 1;
+	comp = DIV_ROUND_CLOSEST_ULL((u64)freq * abs(p_tdm->drift_comp_value),
+			1000000UL); /* compensation is in ppm */
+	freq -= sign * comp;
+
+	pr_info("aml_dai_set_tdm_sysclk nominal_freq = %d, freq = %d, mpll/mclk = %d\n",
+			p_tdm->sysclk_nominal, freq, ratio);
 
 	p_tdm->setting.sysclk = freq;
 	clk_set_rate(p_tdm->clk, freq * ratio);
@@ -699,12 +711,84 @@ static int aml_dai_set_tdm_slot(struct snd_soc_dai *cpu_dai,
 	return 0;
 }
 
+static int aml_dai_drift_info(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->value.integer.min = -500; /* +/- 500ppm */
+	uinfo->value.integer.max = 500;
+	uinfo->count = 1;
+
+	return 0;
+}
+
+static int aml_dai_drift_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_dai *cpu_dai = snd_kcontrol_chip(kcontrol);
+	struct aml_tdm *p_tdm = snd_soc_dai_get_drvdata(cpu_dai);
+
+	ucontrol->value.integer.value[0] = p_tdm->drift_comp_value;
+
+	return 0;
+}
+
+static int aml_dai_drift_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_dai *cpu_dai = snd_kcontrol_chip(kcontrol);
+	struct aml_tdm *p_tdm = snd_soc_dai_get_drvdata(cpu_dai);
+
+	if (ucontrol->value.integer.value[0] == p_tdm->drift_comp_value)
+		return 0;
+
+	p_tdm->drift_comp_value = ucontrol->value.integer.value[0];
+
+	return snd_soc_dai_set_sysclk(cpu_dai, 0, p_tdm->sysclk_nominal,
+			SND_SOC_CLOCK_OUT);
+}
+
+static const struct snd_kcontrol_new tdm_controls[3][1] = {
+	{
+		{
+			.name	= "Drift compensator TDM-A",
+			.iface	= SNDRV_CTL_ELEM_IFACE_MIXER,
+			.info	= aml_dai_drift_info,
+			.get	= aml_dai_drift_get,
+			.put	= aml_dai_drift_put,
+		},
+	},
+	{
+		{
+			.name	= "Drift compensator TDM-B",
+			.iface	= SNDRV_CTL_ELEM_IFACE_MIXER,
+			.info	= aml_dai_drift_info,
+			.get	= aml_dai_drift_get,
+			.put	= aml_dai_drift_put,
+		},
+	},
+	{
+		{
+			.name	= "Drift compensator TDM-C",
+			.iface	= SNDRV_CTL_ELEM_IFACE_MIXER,
+			.info	= aml_dai_drift_info,
+			.get	= aml_dai_drift_get,
+			.put	= aml_dai_drift_put,
+		},
+	},
+};
+
 static int aml_dai_tdm_probe(struct snd_soc_dai *cpu_dai)
 {
 	struct aml_tdm *p_tdm = snd_soc_dai_get_drvdata(cpu_dai);
+	unsigned int tdm_index = p_tdm->id - 1;
 
 	/* config ddr arb */
 	aml_tdm_arb_config(p_tdm->actrl);
+
+	if (tdm_index < ARRAY_SIZE(tdm_controls))
+		snd_soc_add_dai_controls(cpu_dai, tdm_controls[tdm_index],
+				ARRAY_SIZE(tdm_controls[tdm_index]));
 
 	return 0;
 }
