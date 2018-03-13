@@ -22,7 +22,7 @@
 / {
 	model = "Amlogic";
 	amlogic-dt-id = "axg_sue_s1832";
-	compatible = "amlogic, axg";
+	compatible = "sue,stream1832", "amlogic, axg";
 	interrupt-parent = <&gic>;
 	#address-cells = <2>;
 	#size-cells = <2>;
