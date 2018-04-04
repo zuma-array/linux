@@ -187,21 +187,21 @@
 
 	ethmac: ethernet@0xff3f0000 {
 			compatible = "amlogic, gxbb-eth-dwmac";
-			reg = <0x0 0xff3f0000 0x0 0x10000
-			0x0 0xff634540 0x0 0x8>;
-			interrupts = <0 8 1>;
+
+			pinctrl-0 = <&external_eth_pins_x>;
 			pinctrl-names = "external_eth_pins";
-			pinctrl-0 = <&external_eth_pins>;
-			mc_val_internal_phy = <0x1800>;
+
+			reg = <0x0 0xff3f0000 0x0 0x10000 0x0 0xff634540 0x0 0x8>;
+			interrupts = <0 8 1>;
 			mc_val_external_phy = <0x180C>;
 			interrupt-names = "macirq";
 			clocks = <&clkc CLKID_ETH_CORE>;
 			clock-names = "ethclk81";
 			internal_phy=<0>;
+
 			snps,reset-gpio = <&gpio_ao GPIOAO_7 GPIO_ACTIVE_LOW>;
 			snps,reset-active-low = <1>;
 			snps,reset-delays-us = <1000 10000 1000>;
-			status = "disabled";
 	};
 
 	aml_sensor0: aml-sensor@0 {
@@ -881,6 +881,21 @@
 };
 
 &pinctrl_periphs {
+	external_eth_pins_x:external_eth_pins_x {
+		mux {
+			groups = "eth_mdio_x",
+				"eth_mdc_x",
+				"eth_rgmii_rx_clk_x",
+				"eth_rx_dv_x",
+				"eth_rxd0_x",
+				"eth_rxd1_x",
+				"eth_txen_x",
+				"eth_txd0_x",
+				"eth_txd1_x";
+			function = "eth";
+		};
+	};
+
 	uart_b_pins_x:uart_b_pins_x {
 		mux {
 			groups = "uart_tx_b_x",
