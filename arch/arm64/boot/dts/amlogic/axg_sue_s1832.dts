@@ -452,9 +452,6 @@
 		status = "okay";
 
 		power_on_pin = <&gpio_ao GPIOAO_4 GPIO_ACTIVE_HIGH>;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&wifi_pdn_pins>;
 	};
 
 	sd_emmc_c: emmc@ffe07000 {
@@ -857,12 +854,6 @@
 };
 
 &pinctrl_aobus {
-	wifi_pdn_pins:wifi_pdn_pins {
-		mux {
-			groups = "GPIOAO_4";
-			function = "gpio_aobus";
-		};
-	};
 };
 
 &pinctrl_periphs {
