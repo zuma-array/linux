@@ -305,7 +305,6 @@
 		interrupts = <0 16 4>;
 		otg = <1>;
 
-		/* TODO: add to pinmux */
 		gpio-vbus-power = "GPIOAO_12";
 		gpios = <&gpio_ao GPIOAO_12 GPIO_ACTIVE_HIGH>;
 	};
@@ -447,24 +446,10 @@
 		};
 	};
 
-	/* TODO: check if we really need this */
-	bt-dev {
-		compatible = "amlogic, bt-dev";
-		dev_name = "bt-dev";
-		status = "okay";
-		gpio_reset = <&gpio GPIOX_11 GPIO_ACTIVE_HIGH>;
-	};
-
 	wifi {
 		compatible = "amlogic, aml_wifi";
 		dev_name = "aml_wifi";
 		status = "okay";
-
-		// TODO: ceck if we have an IRQ pin
-		/*
-		interrupt_pin = <&gpio GPIOX_6 GPIO_ACTIVE_HIGH>;
-		irq_trigger_type = "GPIO_IRQ_LOW";
-		*/
 
 		power_on_pin = <&gpio_ao GPIOAO_4 GPIO_ACTIVE_HIGH>;
 
@@ -542,7 +527,6 @@
 		non-removable;
 		disable-wp;
 		sdio {
-			/* status = "disabled"; */
 			pinname = "sdio";
 			ocr_avail = <0x200080>; /**VDD voltage 3.3 ~ 3.4 */
 			caps = "MMC_CAP_4_BIT_DATA",
@@ -558,7 +542,6 @@
 			f_min = <400000>;
 			f_max = <200000000>;
 			max_req_size = <0x20000>; /**128KB*/
-			/* pinmux_base = <0xff634400>; */
 			card_type = <3>;
 			/* 3:sdio device(ie:sdio-wifi),
 			 * 4:SD combo (IO+mem) card
