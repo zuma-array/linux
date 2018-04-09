@@ -192,7 +192,7 @@
 			native-mode = <&timing0>;
 			timing0: 800x480px {
 				/* 800x480 */
-				clock-frequency = <50000000>;
+				clock-frequency = <30000000>;
 				hactive = <800>;
 				vactive = <480>;
 				hfront-porch = <1>;
