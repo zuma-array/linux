@@ -63,7 +63,7 @@
 			 */
 			additional-operating-points = <
 				/* KHz	uV */
-				1200000	1225000
+				1200000	1250000
 			>;
 
 			clock-latency = <61036>; /* two CLK32 periods */
