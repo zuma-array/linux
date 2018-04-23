@@ -22,7 +22,8 @@
 #define MXC_GPT_CR_STOPEN	(1 << 5) /* Keep counter enabled in stop mode */
 #define MXC_GPT_CR_FRR		(1 << 9) /* Free running mode */
 
-#define MXC_GPT_CR_CLKSRC_CLKIN (3 << 6)
+#define MXC_GPT_CR_CLKSRC_PER	(1 << 6)
+#define MXC_GPT_CR_CLKSRC_CLKIN	(3 << 6)
 
 
 inline u32 hwcounter_get_value(struct hwcounter_data *hwcounter)
@@ -30,6 +31,22 @@ inline u32 hwcounter_get_value(struct hwcounter_data *hwcounter)
 	return ioread32(hwcounter->timer_base + MXC_GPT_REG_CNT);
 }
 EXPORT_SYMBOL_GPL(hwcounter_get_value);
+
+s32 hwcounter_get_per_rate(struct hwcounter_data *hwcounter)
+{
+	if (!hwcounter->use_per_clk)
+		return -EINVAL;
+
+	/*
+	 * If we count the peripheral clock we need to divide it by the prescaler which we
+	 * set to get the real counting value.
+	 *
+	 * If the peripheral clock had some divider in between then clk_get_rate() will already
+	 * return the proper value.
+	 */
+	return clk_get_rate(hwcounter->clk_per) / (hwcounter->prescaler + 1);
+}
+EXPORT_SYMBOL_GPL(hwcounter_get_per_rate);
 
 static ssize_t value_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -48,6 +65,7 @@ static int hwcounter_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct hwcounter_data *pdata;
+	int ret;
 	u32 reg;
 
 	pdata = devm_kzalloc(dev, sizeof(struct hwcounter_data), GFP_KERNEL);
@@ -67,17 +85,48 @@ static int hwcounter_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to get per clk\n");
 		return -ENXIO;
 	}
+
+	/* read out and apply peripheral clock divider */
+	ret = of_property_read_u32(dev->of_node, "sue,per-div", &pdata->per_div);
+	if (ret < 0)
+		pdata->per_div = 1;
+
+	ret = clk_set_rate(pdata->clk_per, clk_get_rate(clk_get_parent(pdata->clk_per)) / pdata->per_div);
+	if (ret < 0)
+		dev_err(dev, "failed to set peripheral clock rate %d\n", ret);
+
 	clk_prepare_enable(pdata->clk_per);
+
+
+	if (of_get_property(dev->of_node, "sue,use-per-clk", NULL))
+		pdata->use_per_clk = true;
+	else
+		pdata->use_per_clk = false;
+
+
+	ret = of_property_read_u32(dev->of_node, "sue,prescaler", &pdata->prescaler);
+	if (ret == 0) {
+		/* Set prescaler according to value from device tree */
+		dev_info(dev, "setting prescaler to %u\n", pdata->prescaler);
+	} else {
+		dev_info(dev, "prescaler will be disabled\n");
+		pdata->prescaler = 0;
+	}
 
 	/* Set configuration to 0 */
 	iowrite32(0, pdata->timer_base + MXC_GPT_REG_CR);
-	/* Set prescaler to 0 */
-	iowrite32(0, pdata->timer_base + MXC_GPT_REG_PR);
+	/* Set prescaler */
+	iowrite32(pdata->prescaler, pdata->timer_base + MXC_GPT_REG_PR);
 	/* Disable all interrupts */
 	iowrite32(0, pdata->timer_base + MXC_GPT_REG_IR);
 
 	reg = 0;
-	reg |= MXC_GPT_CR_FRR | MXC_GPT_CR_CLKSRC_CLKIN | MXC_GPT_CR_ENMOD;
+	if (pdata->use_per_clk)
+		reg |= MXC_GPT_CR_CLKSRC_PER;
+	else
+		reg |= MXC_GPT_CR_CLKSRC_CLKIN;
+
+	reg |= MXC_GPT_CR_FRR | MXC_GPT_CR_ENMOD;
 	reg |= MXC_GPT_CR_STOPEN | MXC_GPT_CR_DOZEEN | MXC_GPT_CR_WAITEN | MXC_GPT_CR_DBGEN;
 
 	iowrite32(reg, pdata->timer_base + MXC_GPT_REG_CR);
