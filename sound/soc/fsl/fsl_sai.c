@@ -719,10 +719,19 @@ static void fsl_sai_trigger_start(struct fsl_sai *sai, bool tx)
 static void fsl_sai_trigger_start_hwcounter(struct fsl_sai *sai, bool tx)
 {
 	if (sai->trigger_state == FSL_SAI_TRIGGER_STATE_ARMED && sai->hwcounter != NULL && tx) {
+		u32 hwcounter_rate, current_hwcounter;
+		s32 d;
+
 		/* Do the trigger setup and calculation */
-		u32 hwcounter_rate = sai->bclk_rate;
-		u32 current_hwcounter = hwcounter_get_value(sai->hwcounter);
-		s32 d = (s32)sai->trigger_target - (s32)current_hwcounter;
+		if (sai->hwcounter->use_per_clk) {
+			hwcounter_rate = hwcounter_get_per_rate(sai->hwcounter);
+		} else {
+			hwcounter_rate = sai->bclk_rate;
+		}
+		dev_info(&sai->pdev->dev, "hwcounter_rate is %u\n", hwcounter_rate);
+
+		current_hwcounter = hwcounter_get_value(sai->hwcounter);
+		d = (s32)sai->trigger_target - (s32)current_hwcounter;
 
 		dev_dbg(&sai->pdev->dev, "Calculated d is %d = (%u - %u)\n", d, sai->trigger_target, current_hwcounter);
 		/* (hwcounter_rate / 10000) is always ~100 us */
@@ -812,8 +821,16 @@ DEVICE_ATTR(trigger, 0600, trigger_show, trigger_store);
 static ssize_t bclk_rate_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct fsl_sai *sai = (struct fsl_sai *)dev_get_drvdata(dev);
+	u32 hwcounter_rate;
 
-	return scnprintf(buf, PAGE_SIZE, "%u", sai->bclk_rate);
+	if (sai->hwcounter && sai->hwcounter->use_per_clk) {
+		dev_dbg(dev, "hwcounter is using per clk, returning hwcounter_rate instead of bclk_rate\n");
+		hwcounter_rate = hwcounter_get_per_rate(sai->hwcounter);
+	} else {
+		hwcounter_rate = sai->bclk_rate;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%u", hwcounter_rate);
 }
 DEVICE_ATTR(bclk_rate, 0400, bclk_rate_show, NULL);
 
