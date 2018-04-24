@@ -788,14 +788,13 @@ static const struct snd_kcontrol_new tdm_controls[3][1] = {
 static int aml_dai_tdm_probe(struct snd_soc_dai *cpu_dai)
 {
 	struct aml_tdm *p_tdm = snd_soc_dai_get_drvdata(cpu_dai);
-	unsigned int tdm_index = p_tdm->id - 1;
 
 	/* config ddr arb */
 	aml_tdm_arb_config(p_tdm->actrl);
 
-	if (tdm_index < ARRAY_SIZE(tdm_controls))
-		snd_soc_add_dai_controls(cpu_dai, tdm_controls[tdm_index],
-				ARRAY_SIZE(tdm_controls[tdm_index]));
+	if (p_tdm->id < ARRAY_SIZE(tdm_controls))
+		snd_soc_add_dai_controls(cpu_dai, tdm_controls[p_tdm->id],
+				ARRAY_SIZE(tdm_controls[p_tdm->id]));
 
 	return 0;
 }
