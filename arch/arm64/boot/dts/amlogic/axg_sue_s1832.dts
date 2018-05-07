@@ -73,6 +73,7 @@
 		*/
 
 		spk_mute = <&gpio_ao GPIOAO_13 GPIO_ACTIVE_LOW>;
+		pdown-gpios = <&gpio GPIOZ_4 GPIO_ACTIVE_LOW>;
 
 		aml-audio-card,dai-link@1 {
 			format = "i2s";
