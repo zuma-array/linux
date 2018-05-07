@@ -67,6 +67,7 @@ struct aml_card_data {
 	int micphone_gpio_det;
 	int mic_detect_flag;
 	bool mic_det_enable;
+	struct gpio_desc *pdown;
 };
 
 #define aml_priv_to_dev(priv) ((priv)->snd_card.dev)
@@ -739,6 +740,10 @@ static int aml_card_parse_gpios(struct device_node *node,
 					ARRAY_SIZE(card_controls));
 	}
 
+	priv->pdown = devm_gpiod_get_optional(dev, "pdown", GPIOD_OUT_LOW);
+	if (IS_ERR_OR_NULL(priv->pdown))
+		dev_warn(dev, "could not get pdown GPIO\n");
+
 	return ret;
 }
 
@@ -928,6 +933,8 @@ static int aml_card_remove(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
 	struct aml_card_data *priv = snd_soc_card_get_drvdata(card);
+
+	gpiod_set_value(priv->pdown, 1);
 
 	aml_card_remove_jack(&priv->hp_jack);
 	aml_card_remove_jack(&priv->mic_jack);
