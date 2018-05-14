@@ -217,7 +217,15 @@ static void meson_i2c_prepare_xfer(struct meson_i2c *i2c)
 	bool write = !(i2c->msg->flags & I2C_M_RD);
 	int i;
 
-	i2c->count = min_t(int, i2c->msg->len - i2c->pos, 8);
+	/*
+	 * We clamp the count at 1, this is to disable the aggregation
+	 * of transfers. The a113 chip is capable of aggregating up to
+	 * 8 i2c transfers, however, it was observed that some i2c slaves
+	 * like the STM8 do not work properly with this feature. Most
+	 * probably the handling of the repeated start condition is
+	 * broken on those slave devices.
+	 */
+	i2c->count = min_t(int, i2c->msg->len - i2c->pos, 1);
 
 	for (i = 0; i < i2c->count - 1; i++)
 		meson_i2c_add_token(i2c, TOKEN_DATA);
