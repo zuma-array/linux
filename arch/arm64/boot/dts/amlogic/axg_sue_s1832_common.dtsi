@@ -322,8 +322,7 @@
 		reg = <0x0 0xffd23000 0x0 0x18>;
 		interrupts = <0 75 1>;
 		status = "okay";
-		clocks = <&xtal
-			&clkc CLKID_UART1>;
+		clocks = <&clkc CLKID_CLK81 &clkc CLKID_UART1>;
 		clock-names = "clk_uart",
 			"clk_gate";
 		fifosize = < 64 >;
