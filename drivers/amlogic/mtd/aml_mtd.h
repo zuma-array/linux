@@ -71,6 +71,7 @@ extern unsigned char pagelist_hynix256[128];
  * "environment" in dts file.
  * #define CONFIG_MTD_ENV_IN_NAND
  */
+#define CONFIG_MTD_ENV_IN_NAND
 
 /*
  ** Max page list cnt for usrdef mode
