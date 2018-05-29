@@ -512,7 +512,8 @@ mwifiex_scan_create_channel_list(struct mwifiex_private *priv,
 				scan_chan_list[chan_idx].max_scan_time =
 					cpu_to_le16((u16) user_scan_in->
 					chan_list[0].scan_time);
-			else if (ch->flags & IEEE80211_CHAN_NO_IR)
+			else if ((ch->flags & IEEE80211_CHAN_NO_IR) ||
+				 (ch->flags & IEEE80211_CHAN_RADAR))
 				scan_chan_list[chan_idx].max_scan_time =
 					cpu_to_le16(adapter->passive_scan_time);
 			else
@@ -527,7 +528,9 @@ mwifiex_scan_create_channel_list(struct mwifiex_private *priv,
 					&= ~MWIFIEX_PASSIVE_SCAN;
 			scan_chan_list[chan_idx].chan_number =
 							(u32) ch->hw_value;
-			if (filtered_scan) {
+			if (filtered_scan &&
+			    !((ch->flags & IEEE80211_CHAN_NO_IR) ||
+			      (ch->flags & IEEE80211_CHAN_RADAR))) {
 				scan_chan_list[chan_idx].max_scan_time =
 				cpu_to_le16(adapter->specific_scan_time);
 				scan_chan_list[chan_idx].chan_scan_mode_bitmap
