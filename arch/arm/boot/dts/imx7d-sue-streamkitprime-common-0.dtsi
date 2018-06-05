@@ -237,3 +237,11 @@
 	pinctrl-0 = <&pinctrl_pwm3>;
 	status = "okay";
 };
+
+/* for USB1: use "usbotg1" here
+   for USB2: use "usbotg2" here */
+&usbotg2 {
+	/delete-property/vbus-supply;
+	dr_mode = "peripheral";
+	disable-vbus-oc-protection;
+};
