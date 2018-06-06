@@ -52,6 +52,16 @@
 		opp1_2GHz: opp@1200000000 {
 			opp-hz = /bits/ 64 <1200000000>;
 			opp-microvolt = <1000000>;
+
+			/*
+			 * An operating point marked with opp-suspend will be set when the system
+			 * goes to suspend *or* reboot *or* shutdown.
+			 *
+			 * For Stream1832 we want to set the AXP152 back to the 1 GHz voltage, otherwise
+			 * the U-Boot will not be able to boot after a reboot since the vdd_arm voltage
+			 * might be too low from a previous frequency change to a lower operating point.
+			 */
+			opp-suspend;
 		};
 		opp1_3GHz: opp@1296000000 {
 			opp-hz = /bits/ 64 <1296000000>;
