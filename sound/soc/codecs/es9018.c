@@ -119,34 +119,6 @@ static bool is_dsd(snd_pcm_format_t fmt)
 	}
 }
 
-static int es9018_hw_params(struct snd_pcm_substream *substream,
-			    struct snd_pcm_hw_params *params,
-			    struct snd_soc_dai *dai)
-{
-	struct snd_soc_codec *codec = dai->codec;
-	snd_pcm_format_t fmt = params_format(params);
-	u32 rate = params_rate(params);
-	u32 bclk_rate = rate * snd_pcm_format_physical_width(fmt);
-
-	if (is_dsd(fmt)) {
-		/*
-		 * For DSD64 keep the DSD DPLL bandwidth at the default value of 0x0A,
-		 * for higher speeds set the bandwidth to a value of 0x0C.
-		 */
-		u32 bw_val = (bclk_rate <= HBW_BCLK_RATE) ? 0x0A : 0x0C;
-		snd_soc_update_bits(codec, ES9018_DPLL_BW, ES9018_DPLL_BW_DSD_MASK, bw_val);
-	} else {
-		/*
-		 * For BCLK below ~2.8 MHz we keep the DPLL bandwidth at the default value of 0x50,
-		 * for higher speeds set the bandwidth to a value of 0xF0.
-		 */
-		u32 bw_val = (bclk_rate <= HBW_BCLK_RATE) ? 0x50 : 0xF0;
-		snd_soc_update_bits(codec, ES9018_DPLL_BW, ES9018_DPLL_BW_I2S_MASK, bw_val);
-	}
-
-	return 0;
-}
-
 static const char * const es9018_pcm_rolloff_filter_txt[] = {
 	"fast", "slow", "minimum phase"
 };
@@ -179,7 +151,6 @@ static const struct snd_kcontrol_new es9018_controls[] = {
 
 static const struct snd_soc_dai_ops es9018_dai_ops = {
 	.digital_mute	= es9018_digital_mute,
-	.hw_params	= es9018_hw_params,
 };
 
 static struct snd_soc_dai_driver es9018_dai = {
@@ -216,6 +187,18 @@ static int es9018_probe(struct snd_soc_codec *codec)
 	 * Disable automatic input detection and use input select, which is the GPIO
 	 */
 	snd_soc_update_bits(codec, ES9018_INPUT_CONF, ES9018_INPUT_CONF_AUTO_SEL_MASK, ES9018_INPUT_CONF_AUTO_SEL_NONE);
+
+
+	/*
+	 * Set the PCM and DSD DPLL values both to 0xC, this allows for two things:
+	 *
+	 *  * For PCM having a higher DPLL bandwidth value than the default allows us to skew the input
+	 *    clock by a few PPM without the DPLL unlocking.
+	 *
+	 *  * For DSD setting the DPLL bandwidth value to a higher value allows us playback of quad speed
+	 *    DSD without glitches and DPLL unlocks.
+	 */
+	snd_soc_update_bits(codec, ES9018_DPLL_BW, ES9018_DPLL_BW_I2S_MASK | ES9018_DPLL_BW_DSD_MASK, 0xCC);
 
 
 	return 0;
