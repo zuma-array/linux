@@ -9,6 +9,18 @@
 / {
 	model = "StreamUnlimited stream810 democlient board (imx7d)";
 	compatible = "sue,stream810-factory", "sue,stream810", "fsl,imx7d";
+
+	/*
+	 * All currently produced modules support 1.2 GHz operation, so in the
+	 * factory tester we always enable the 1.2 GHz operating point. The
+	 * other main reason is that when we want to do the margin test, the module
+	 * only crashes at 1.2 GHz.
+	 */
+	operating-points = <
+		1200000	1250000
+		996000	1075000
+		792000	975000
+	>;
 };
 
 &gpio_buttons {
