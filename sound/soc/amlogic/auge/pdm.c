@@ -122,7 +122,7 @@ static int aml_pdm_filter_mode_set_enum(
 	return 0;
 }
 
-int pdm_hcic_shift_gain = 1;
+int pdm_hcic_shift_gain = 0;
 
 static const char *const pdm_hcic_shift_gain_texts[] = {
 	"keep with coeff",
