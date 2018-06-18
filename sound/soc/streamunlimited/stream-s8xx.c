@@ -35,7 +35,7 @@
 #define IMX7D_SAI_PLL_44k1	812851200UL
 
 #define HDPLUS_PCM_MIN_RATE	192000
-#define HIGH_AHB_IPG_MIN_RATE	705600
+#define HIGH_AHB_IPG_MIN_RATE	6144000 /* everyting above 192kHz 16-bit 2 ch. will request a higher AHB frequency */
 
 struct snd_soc_am33xx_s800 {
 	struct snd_soc_card	card;
@@ -291,9 +291,13 @@ static int am33xx_s800_common_hw_params(struct snd_pcm_substream *substream,
 		dev_info(card->dev, "Format is PCM\n");
 	}
 
-	/* On DSD 4x we increase the AHB frequency */
+	/*
+	 * On high bitrate playback (e.g. DSD256, 384kHz PCM) we need to increase the
+	 * speed of the AHB. Otherwise it seems that the bus gets saturated and the
+	 * system freezes.
+	 */
 	priv->requested_high_busfreq = false;
-	if (is_dsd && rate > HIGH_AHB_IPG_MIN_RATE && dai_fmt & SND_SOC_DAIFMT_CBS_CFS) {
+	if (bclk > HIGH_AHB_IPG_MIN_RATE) {
 		request_bus_freq(BUS_FREQ_HIGH);
 		request_high_ahb_ipg_freq();
 		priv->requested_high_busfreq = true;
@@ -451,7 +455,7 @@ static int am33xx_s800_common_hw_free(struct snd_pcm_substream *substream)
 		gpiod_set_value(priv->pcmndsd, 1);
 	}
 
-	if ((rtd->dai_link->dai_fmt & SND_SOC_DAIFMT_CBS_CFS) && priv->requested_high_busfreq) {
+	if (priv->requested_high_busfreq) {
 		release_high_ahb_ipg_freq();
 		release_bus_freq(BUS_FREQ_HIGH);
 		priv->requested_high_busfreq = false;
