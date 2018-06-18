@@ -828,34 +828,53 @@ int get_bus_freq_mode(void)
 }
 EXPORT_SYMBOL(get_bus_freq_mode);
 
-int set_high_ahb_ipg_freq(void)
+int request_high_ahb_ipg_freq(void)
 {
-	if (high_bus_freq_mode == 0 || high_ahb_ipg_freq == 1)
+	mutex_lock(&bus_freq_mutex);
+	if (high_bus_freq_mode == 0) {
+		mutex_unlock(&bus_freq_mutex);
 		return -EINVAL;
+	}
 
-	dev_info(busfreq_dev, "entering high AHB/IPG mode\n");
-	clk_set_rate(ahb_clk, AHB_HIGH_CLK_RATE);
-	clk_set_rate(ipg_clk, IPG_HIGH_CLK_RATE);
+	if (high_ahb_ipg_freq == 0) {
+		dev_info(busfreq_dev, "entering high AHB/IPG mode\n");
+		clk_set_rate(ahb_clk, AHB_HIGH_CLK_RATE);
+		clk_set_rate(ipg_clk, IPG_HIGH_CLK_RATE);
+	}
 
-	high_ahb_ipg_freq = 1;
+	high_ahb_ipg_freq += 1;
+
+	mutex_unlock(&bus_freq_mutex);
 
 	return 0;
 }
-EXPORT_SYMBOL(set_high_ahb_ipg_freq);
+EXPORT_SYMBOL(request_high_ahb_ipg_freq);
 
-int set_low_ahb_ipg_freq(void)
+/*
+ * This function returns 1 when the refcount went to 0 and the clock
+ * aws changed back to the lower speed.
+ */
+int release_high_ahb_ipg_freq(void)
 {
+	mutex_lock(&bus_freq_mutex);
+
 	if (high_ahb_ipg_freq == 0)
 		return -EINVAL;
 
-	dev_info(busfreq_dev, "entering low (normal) AHB/IPG mode\n");
-	clk_set_rate(ipg_clk, IPG_LOW_CLK_RATE);
-	clk_set_rate(ahb_clk, AHB_LOW_CLK_RATE);
-	high_ahb_ipg_freq = 0;
+	high_ahb_ipg_freq -= 1;
 
+	if (high_ahb_ipg_freq == 0) {
+		dev_info(busfreq_dev, "entering low (normal) AHB/IPG mode\n");
+		clk_set_rate(ipg_clk, IPG_LOW_CLK_RATE);
+		clk_set_rate(ahb_clk, AHB_LOW_CLK_RATE);
+		mutex_unlock(&bus_freq_mutex);
+		return 1;
+	}
+
+	mutex_unlock(&bus_freq_mutex);
 	return 0;
 }
-EXPORT_SYMBOL(set_low_ahb_ipg_freq);
+EXPORT_SYMBOL(release_high_ahb_ipg_freq);
 
 static struct map_desc ddr_iram_io_desc __initdata = {
 	/* .virtual and .pfn are run-time assigned */

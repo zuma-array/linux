@@ -295,7 +295,7 @@ static int am33xx_s800_common_hw_params(struct snd_pcm_substream *substream,
 	priv->requested_high_busfreq = false;
 	if (is_dsd && rate > HIGH_AHB_IPG_MIN_RATE && dai_fmt & SND_SOC_DAIFMT_CBS_CFS) {
 		request_bus_freq(BUS_FREQ_HIGH);
-		set_high_ahb_ipg_freq();
+		request_high_ahb_ipg_freq();
 		priv->requested_high_busfreq = true;
 	}
 
@@ -452,7 +452,7 @@ static int am33xx_s800_common_hw_free(struct snd_pcm_substream *substream)
 	}
 
 	if ((rtd->dai_link->dai_fmt & SND_SOC_DAIFMT_CBS_CFS) && priv->requested_high_busfreq) {
-		set_low_ahb_ipg_freq();
+		release_high_ahb_ipg_freq();
 		release_bus_freq(BUS_FREQ_HIGH);
 		priv->requested_high_busfreq = false;
 	}
