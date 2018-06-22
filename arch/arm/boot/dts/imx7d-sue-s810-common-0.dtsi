@@ -152,6 +152,27 @@
 	};
 };
 
+&gpt1 {
+	compatible = "sue,hwcounter-mx7";
+
+	status = "okay";
+
+	/*
+	 * We want to use the the internal peripheral clock for counting the audio PLL
+	 * thus we need to set the parent of the peripheral clock to  IMX7D_PLL_AUDIO_POST_DIV.
+	 *
+	 * However the audio PLL is too fast so we need to divide it by 2 using the sue,per-div
+	 * option and then we also enable a prescaler by 8. So effectivly we are counting the
+	 * (audio PLL) / 16 = hwcounter rate
+	 */
+	assigned-clocks = <&clks IMX7D_GPT1_ROOT_SRC>;
+	assigned-clock-parents = <&clks IMX7D_PLL_AUDIO_POST_DIV>;
+
+	sue,use-per-clk;
+	sue,per-div = <2>;	/* divide the peripheral clock by 2 => (audio PLL)/2  */
+	sue,prescaler = <7>;	/* count with (peripheral clock)/8  */
+};
+
 &i2c4 {
 	clock-frequency = <100000>;
 	pinctrl-names = "default";
@@ -364,6 +385,9 @@
 			  <&clks IMX7D_SAI1_ROOT_CLK>;
 	assigned-clock-parents = <&clks IMX7D_PLL_AUDIO_POST_DIV>;
 	assigned-clock-rates = <0>, <24576000>;
+
+	hwcounter-node = <&gpt1>;
+
 	status = "okay";
 };
 

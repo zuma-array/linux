@@ -91,15 +91,6 @@
 	};
 };
 
-&gpt1 {
-	compatible = "sue,hwcounter-mx7";
-
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_hwcounter>;
-
-	status = "okay";
-};
-
 &i2c2 {
 	/* High-end board additions */
 	es9018: es9018@48 {
@@ -132,12 +123,6 @@
  */
 &iomuxc {
 	imx7d-sue-streamkitprime-voice {
-		pinctrl_hwcounter: hwcountergrp {
-			fsl,pins = <
-				MX7D_PAD_LCD_DATA02__GPT1_CLK		0x00
-			>;
-		};
-
 		pinctrl_audio: audiogrp {
 			fsl,pins = <
 				MX7D_PAD_GPIO1_IO08__GPIO1_IO8		0x00    /* PCM/nDSD */
@@ -179,8 +164,6 @@
 	sue,pdm-sync-slave = <&sai3>;
 	/* Set a higher initial SAI clock to enable 384 kHz playback */
 	assigned-clock-rates = <0>, <49152000>;
-
-	hwcounter-node = <&gpt1>;
 };
 
 &sai2 {

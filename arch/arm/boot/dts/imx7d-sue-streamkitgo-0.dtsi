@@ -50,12 +50,6 @@
 	pinctrl-0 = <&pinctrl_hostlink>;
 
 	imx7d-sue-streamkitgo {
-		pinctrl_hwcounter: hwcountergrp {
-			fsl,pins = <
-				MX7D_PAD_LCD_DATA02__GPT1_CLK		0x00
-			>;
-		};
-
 		pinctrl_audio_streamkitgo: audiostreamkitgogrp {
 			fsl,pins = <
 				MX7D_PAD_GPIO1_IO11__GPIO1_IO11	0x00	/* AMP nMUTE */
@@ -80,15 +74,3 @@
 	status = "disabled";
 };
 
-&gpt1 {
-	compatible = "sue,hwcounter-mx7";
-
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_hwcounter>;
-
-	status = "okay";
-};
-
-&sai1 {
-	hwcounter-node = <&gpt1>;
-};
