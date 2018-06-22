@@ -6,5 +6,5 @@
 
 /dts-v1/;
 
-#include "imx7d-sue-s810-0.dtsi"
+#include "imx7d-sue-s810-extended-0.dtsi"
 #include "imx7d-sue-demo-0.dtsi"

@@ -46,18 +46,6 @@
 			gpio = <&gpio1 5 GPIO_ACTIVE_HIGH>;
 			enable-active-high;
 		};
-
-		reg_usb_otg2_vbus: regulator@2 {
-			pinctrl-names = "default";
-			pinctrl-0 = <&pinctrl_usbotg2_pwr_2>;
-			compatible = "regulator-fixed";
-			reg = <1>;
-			regulator-name = "usb_otg2_vbus";
-			regulator-min-microvolt = <5000000>;
-			regulator-max-microvolt = <5000000>;
-			gpio = <&gpio1 7 GPIO_ACTIVE_HIGH>;
-			enable-active-high;
-		};
 	};
 
 	gpio_buttons: gpio-keys {
@@ -164,13 +152,6 @@
 	};
 };
 
-&i2c2 {
-	clock-frequency = <100000>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_i2c2>;
-	status = "okay";
-};
-
 &i2c4 {
 	clock-frequency = <100000>;
 	pinctrl-names = "default";
@@ -220,7 +201,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_32kHz>;
 
-	imx7d-sue-s810 {
+	imx7d-sue-s810-common {
 		pinctrl_wifi: wifigrp {
 			fsl,pins = <
 				MX7D_PAD_ECSPI2_SCLK__GPIO4_IO20	0x14 /* PCIE_W_DISABLE */
@@ -259,6 +240,12 @@
 			>;
 		};
 
+		pinctrl_gpio_buttons: gpio-buttons {
+			fsl,pins = <
+				MX7D_PAD_LCD_DATA16__GPIO3_IO21		0x0
+			>;
+		};
+
 		pinctrl_gpmi_nand_1: gpmi-nand-1 {
 			fsl,pins = <
 				MX7D_PAD_SD3_CLK__NAND_CLE		0x71
@@ -276,19 +263,6 @@
 				MX7D_PAD_SD3_DATA5__NAND_DATA05		0x71
 				MX7D_PAD_SD3_DATA6__NAND_DATA06		0x71
 				MX7D_PAD_SD3_DATA7__NAND_DATA07		0x71
-			>;
-		};
-
-		pinctrl_gpio_buttons: gpio-buttons {
-			fsl,pins = <
-				MX7D_PAD_LCD_DATA16__GPIO3_IO21		0x0
-			>;
-		};
-
-		pinctrl_i2c2: i2c2grp {
-			fsl,pins = <
-				MX7D_PAD_UART2_RX_DATA__I2C2_SCL	0x4000007f
-				MX7D_PAD_UART2_TX_DATA__I2C2_SDA	0x4000007f
 			>;
 		};
 
@@ -345,22 +319,16 @@
 &iomuxc_lpsr {
 	pinctrl-names = "default";
 
-	imx7d-sue-s810 {
+	imx7d-sue-s810-common {
 		pinctrl_usbotg2_pwr_1: usbotg1-2 {
 			fsl,pins = <
 				MX7D_PAD_GPIO1_IO05__GPIO1_IO5	0x14
 			>;
 		};
 
-		pinctrl_usbotg2_pwr_2: usbotg2-2 {
-			fsl,pins = <
-				MX7D_PAD_GPIO1_IO07__GPIO1_IO7	0x14
-			>;
-		};
-
 		pinctrl_sai1_mclk: sai1grp_mclk {
 			fsl,pins = <
-				MX7D_PAD_GPIO1_IO01__SAI1_MCLK	0x03	/* I2S_MCLK_INOUT */
+				MX7D_PAD_GPIO1_IO01__SAI1_MCLK	0x14	/* I2S_MCLK_INOUT */
 			>;
 		};
 
@@ -438,12 +406,6 @@
 
 &usbotg1 {
 	vbus-supply = <&reg_usb_otg1_vbus>;
-	dr_mode = "host";
-	status = "okay";
-};
-
-&usbotg2 {
-	vbus-supply = <&reg_usb_otg2_vbus>;
 	dr_mode = "host";
 	status = "okay";
 };

@@ -1,0 +1,58 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+#include "imx7d-sue-s810-common-0.dtsi"
+
+/ {
+	regulators {
+		reg_usb_otg2_vbus: regulator@2 {
+			pinctrl-names = "default";
+			pinctrl-0 = <&pinctrl_usbotg2_pwr_2>;
+			compatible = "regulator-fixed";
+			reg = <1>;
+			regulator-name = "usb_otg2_vbus";
+			regulator-min-microvolt = <5000000>;
+			regulator-max-microvolt = <5000000>;
+			gpio = <&gpio1 7 GPIO_ACTIVE_HIGH>;
+			enable-active-high;
+		};
+	};
+};
+
+&i2c2 {
+	clock-frequency = <100000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c2>;
+	status = "okay";
+};
+
+&iomuxc {
+	imx7d-sue-s810-extended {
+		pinctrl_i2c2: i2c2grp {
+			fsl,pins = <
+				MX7D_PAD_UART2_RX_DATA__I2C2_SCL	0x4000007f
+				MX7D_PAD_UART2_TX_DATA__I2C2_SDA	0x4000007f
+			>;
+		};
+	};
+};
+
+&iomuxc_lpsr {
+	imx7d-sue-s810-extended {
+		pinctrl_usbotg2_pwr_2: usbotg2-2 {
+			fsl,pins = <
+				MX7D_PAD_GPIO1_IO07__GPIO1_IO7	0x14
+			>;
+		};
+	};
+};
+
+&usbotg2 {
+	vbus-supply = <&reg_usb_otg2_vbus>;
+	dr_mode = "host";
+	status = "okay";
+};
+
