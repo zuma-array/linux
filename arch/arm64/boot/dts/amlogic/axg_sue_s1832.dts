@@ -28,7 +28,7 @@
 
 		reg = <0x0 0xff3f0000 0x0 0x10000 0x0 0xff634540 0x0 0x8>;
 		interrupts = <0 8 1>;
-		mc_val_external_phy = <0x180C>;
+		mc_val_external_phy = <0x1804>;
 		interrupt-names = "macirq";
 		clocks = <&clkc CLKID_ETH_CORE>;
 		clock-names = "ethclk81";
