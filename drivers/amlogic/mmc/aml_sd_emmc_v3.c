@@ -246,12 +246,15 @@ static void aml_sd_emmc_set_timing_v3(struct amlsd_host *host,
 				&& aml_card_type_non_sdio(pdata))
 			|| (timing == MMC_TIMING_UHS_SDR104)) {
 		clkc->core_phase = 2;
+	} else if (timing == MMC_TIMING_UHS_SDR104) {
+		clkc->core_phase = 2;
+		writel(0x4d34d3, host->base + SD_EMMC_DELAY1_V3);
 	} else
 		ctrl->ddr = 0;
 
 	writel(vclkc, host->base + SD_EMMC_CLOCK_V3);
 	pdata->clkc = vclkc;
-
+	pr_info("%s(): core_phase = %d\n", __func__, clkc->core_phase);
 	writel(vctrl, host->base + SD_EMMC_CFG);
 	pr_debug("sd emmc is %s\n",
 			ctrl->ddr?"DDR mode":"SDR mode");
