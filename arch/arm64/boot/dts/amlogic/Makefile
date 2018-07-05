@@ -1,5 +1,7 @@
 dtb-y += axg_sue_s1832_l1_prime.dtb
+dtb-y += axg_sue_s1832_l2_prime.dtb
 dtb-y += axg_sue_s1832_l1_factory.dtb
+dtb-y += axg_sue_s1832_l2_factory.dtb
 
 targets += dtbs
 
