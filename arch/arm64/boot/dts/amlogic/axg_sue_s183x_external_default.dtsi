@@ -1,5 +1,5 @@
 /*
- * arch/arm64/boot/dts/amlogic/axg_sue_s1832.dts
+ * arch/arm64/boot/dts/amlogic/axg_sue_s183x_external_default.dtsi
  *
  * Copyright (C) 2017 Amlogic, Inc. All rights reserved.
  *
@@ -15,9 +15,11 @@
  *
  */
 
-/dts-v1/;
 
-#include "axg_sue_s1832_common.dtsi"
+/*
+ * DT for default configuration of Stream183x external IOs.
+ */
+
 
 / {
 	ethmac: ethernet@0xff3f0000 {
