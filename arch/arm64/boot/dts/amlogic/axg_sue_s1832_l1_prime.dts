@@ -1,5 +1,5 @@
 /*
- * arch/arm64/boot/dts/amlogic/axg_sue_s1832.dts
+ * arch/arm64/boot/dts/amlogic/axg_sue_s1832_l1_prime.dts
  *
  * Copyright (C) 2017 Amlogic, Inc. All rights reserved.
  *
@@ -17,5 +17,7 @@
 
 /dts-v1/;
 
-#include "axg_sue_s1832_common.dtsi"
+#include "axg_sue_s183x_internal.dtsi"
+#include "axg_sue_s183x_external_default.dtsi"
+#include "axg_sue_prime.dtsi"
 
