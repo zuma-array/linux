@@ -599,7 +599,7 @@
 
 	pmic: axp152@30 {
 		compatible = "x-powers,axp152";
-		reg = <0x30>;
+		reg = <0x32>;
 		no-irq;
 
 		regulators {
