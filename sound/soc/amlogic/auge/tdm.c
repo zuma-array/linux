@@ -637,7 +637,7 @@ static int aml_dai_set_tdm_sysclk(struct snd_soc_dai *cpu_dai,
 			1000000UL); /* compensation is in ppm */
 	freq -= sign * comp;
 
-	pr_info("aml_dai_set_tdm_sysclk nominal_freq = %d, freq = %d, mpll/mclk = %d\n",
+	pr_debug("aml_dai_set_tdm_sysclk nominal_freq = %d, freq = %d, mpll/mclk = %d\n",
 			p_tdm->sysclk_nominal, freq, ratio);
 
 	p_tdm->setting.sysclk = freq;
