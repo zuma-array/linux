@@ -511,6 +511,8 @@
 		compatible = "amlogic, spicc";
 		status = "disabled";
 		reg = <0x0 0xffd13000 0x0 0x3c>;
+		#address-cells = <1>;
+		#size-cells = <0>;
 		clocks = <&clkc CLKID_SPICC0>,
 			<&clkc CLKID_SPICC_COMP>;
 		clock-names = "spicc_clk",
