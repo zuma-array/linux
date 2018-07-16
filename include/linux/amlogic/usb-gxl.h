@@ -250,6 +250,10 @@ struct amlogic_usb {
 
 	int portnum;
 	int suspend_flag;
+
+	int			oc_irq;
+	bool			oc_detect;
+	struct delayed_work	oc_work;
 };
 
 #endif
