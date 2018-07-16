@@ -70,23 +70,26 @@ void aml_new_usb_notifier_call(unsigned long is_device_on)
 }
 EXPORT_SYMBOL(aml_new_usb_notifier_call);
 
-static void set_usb_vbus_power
-	(struct gpio_desc *usb_gd, int pin, char is_power_on)
+static void amlogic_new_set_vbus_power(struct amlogic_usb *phy, char is_power_on)
 {
-	if (is_power_on)
-		/*set vbus on by gpio*/
-		gpiod_direction_output(usb_gd, is_power_on);
-	else
-		/*set vbus off by gpio first*/
-		gpiod_direction_output(usb_gd, is_power_on);
-}
-
-static void amlogic_new_set_vbus_power
-		(struct amlogic_usb *phy, char is_power_on)
-{
-	if (phy->vbus_power_pin != -1)
-		set_usb_vbus_power(phy->usb_gpio_desc,
-			phy->vbus_power_pin, is_power_on);
+	if (phy->vbus_power_pin != -1) {
+		if (is_power_on) {
+			if (phy->oc_detect) {
+				/*
+				 * When over-current detection (using DRVVBUS) is enabled, we configure
+				 * the pin as an input with a pull-up, when the DRVVBUS gets low an IRQ
+				 * will be triggered.
+				 */
+				gpiod_direction_input(phy->usb_gpio_desc);
+				gpiod_set_pull(phy->usb_gpio_desc, GPIOD_PULL_UP);
+			} else {
+				/* without over-current detection we just drive the pin */
+				gpiod_direction_output(phy->usb_gpio_desc, is_power_on);
+			}
+		} else {
+			gpiod_direction_output(phy->usb_gpio_desc, is_power_on);
+		}
+	}
 }
 
 static int amlogic_new_usb3_suspend(struct usb_phy *x, int suspend)
@@ -200,6 +203,25 @@ static void set_mode(unsigned long reg_addr, int mode)
 	writel(reg0.d32, u2p_aml_regs.u2p_r[0]);
 }
 
+static irqreturn_t amlogic_gxl_oc_irq(int irq, void *dev_id)
+{
+	struct amlogic_usb *phy = dev_id;
+
+	/* disable port power and shedule re-enabling in one second from now */
+	amlogic_new_set_vbus_power(phy, 0);
+	schedule_delayed_work(&phy->oc_work, msecs_to_jiffies(1000));
+
+	return IRQ_HANDLED;
+}
+
+static void amlogic_gxl_oc_work(struct work_struct *work)
+{
+	struct amlogic_usb *phy = container_of(work, struct amlogic_usb, oc_work.work);
+
+	dev_info(phy->dev, "trying to re-enable port power\n");
+	amlogic_new_set_vbus_power(phy, 1);
+}
+
 static void amlogic_gxl_work(struct work_struct *work)
 {
 	struct amlogic_usb *phy =
@@ -249,6 +271,7 @@ static int amlogic_new_usb3_probe(struct platform_device *pdev)
 	int retval;
 	int gpio_vbus_power_pin = -1;
 	int otg = 0;
+	bool oc_detect = false;
 
 	gpio_name = of_get_property(dev->of_node, "gpio-vbus-power", NULL);
 	if (gpio_name) {
@@ -269,6 +292,11 @@ static int amlogic_new_usb3_probe(struct platform_device *pdev)
 
 	if (!portnum)
 		dev_err(&pdev->dev, "This phy has no usb port\n");
+
+	if(of_property_read_bool(dev->of_node, "sue,oc-detect")) {
+		dev_info(&pdev->dev, "over-current detection usind DRVVBUS is enabled\n");
+		oc_detect = true;
+	}
 
 	phy_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	phy_base = devm_ioremap_resource(dev, phy_mem);
@@ -310,8 +338,24 @@ static int amlogic_new_usb3_probe(struct platform_device *pdev)
 	phy->phy.type		= USB_PHY_TYPE_USB3;
 	phy->vbus_power_pin = gpio_vbus_power_pin;
 	phy->usb_gpio_desc = usb_gd;
+	phy->oc_detect		= oc_detect;
 
 	INIT_DELAYED_WORK(&phy->work, amlogic_gxl_work);
+
+	if (phy->oc_detect) {
+		int ret;
+		phy->oc_irq = gpiod_to_irq(phy->usb_gpio_desc);
+
+		ret = devm_request_irq(dev, phy->oc_irq,
+					amlogic_gxl_oc_irq,
+					IRQF_TRIGGER_FALLING,
+					"amlogic_gxl_vbus_oc_irq", phy);
+
+		if (ret)
+			dev_err(dev, "error requesting oc irq: %d\n", ret);
+
+		INIT_DELAYED_WORK(&phy->oc_work, amlogic_gxl_oc_work);
+	}
 
 	usb_add_phy_dev(&phy->phy);
 
