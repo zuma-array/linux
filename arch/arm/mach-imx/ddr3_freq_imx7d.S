@@ -175,7 +175,7 @@
 	str	r7, [r5, #DDRPHY_OFFSETW_CON2]
 
 	ldr	r7, [r9, #ANADIG_DIGPROG]
-	and	r7, r7, #0x11
+	and	r7, r7, #0xFF
 	cmp	r7, #0x11
 	bne	20f
 
@@ -310,7 +310,7 @@
 	str	r7, [r5, #DDRPHY_OFFSETW_CON2]
 
 	ldr	r7, [r9, #ANADIG_DIGPROG]
-	and	r7, r7, #0x11
+	and	r7, r7, #0xFF
 	cmp	r7, #0x11
 	bne	22f
 
