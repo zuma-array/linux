@@ -23,3 +23,11 @@
 &pmic {
 	reg = <0x30>;
 };
+
+/*
+ * On the L1 revision the watchdog reset does not work properly because of
+ * the hardware design.
+ */
+&wdt_ee {
+	status = "disabled";
+};
