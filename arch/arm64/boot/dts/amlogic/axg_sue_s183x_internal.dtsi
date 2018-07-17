@@ -660,3 +660,8 @@
 		};
 	};
 };
+
+&wdt_ee {
+	status = "okay";
+	reset_watchdog_method = <0>; /* 0:sysfs,1:kernel */
+};
