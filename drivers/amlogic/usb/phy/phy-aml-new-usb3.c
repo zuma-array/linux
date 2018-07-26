@@ -42,6 +42,10 @@ struct amlogic_usb	*g_phy;
 static void set_mode(unsigned long reg_addr, int mode);
 BLOCKING_NOTIFIER_HEAD(aml_new_usb_notifier_list);
 
+static int forceid = -1;
+module_param(forceid, int, 0);
+MODULE_PARM_DESC(forceid, "Override the status of the ID pin to 1 or 0, -1 to use the physical hardware pin (default=-1)");
+
 int aml_new_usb_register_notifier(struct notifier_block *nb)
 {
 	int ret;
@@ -104,6 +108,15 @@ static void amlogic_new_usb3phy_shutdown(struct usb_phy *x)
 	phy->suspend_flag = 1;
 }
 
+static int idpin_after_force(union usb_r5_t r5)
+{
+	/* if we do not override the ID pin value read the physical one */
+	if (forceid == -1)
+		return r5.b.iddig_curr;
+	else
+		return forceid;
+}
+
 void aml_new_usb_init(void)
 {
 	union usb_r5_t r5 = {.d32 = 0};
@@ -111,7 +124,7 @@ void aml_new_usb_init(void)
 		usb_new_aml_regs.usb_r[0] - 0x80);
 
 	r5.d32 = readl(usb_new_aml_regs.usb_r[5]);
-	if (r5.b.iddig_curr == 0) {
+	if (idpin_after_force(r5) == 0) {
 		amlogic_new_set_vbus_power(g_phy, 1);
 		aml_new_usb_notifier_call(0);
 		set_mode(reg_addr, HOST_MODE);
@@ -230,7 +243,7 @@ static void amlogic_gxl_work(struct work_struct *work)
 	unsigned long reg_addr = ((unsigned long)phy->regs - 0x80);
 
 	r5.d32 = readl(usb_new_aml_regs.usb_r[5]);
-	if (r5.b.iddig_curr == 0) {
+	if (idpin_after_force(r5) == 0) {
 		amlogic_new_set_vbus_power(phy, 1);
 		aml_new_usb_notifier_call(0);
 		set_mode(reg_addr, HOST_MODE);
