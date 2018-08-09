@@ -57,7 +57,7 @@
 		};
 		opp1_2GHz: opp@1200000000 {
 			opp-hz = /bits/ 64 <1200000000>;
-			opp-microvolt = <1000000>;
+			opp-microvolt = <1050000>;
 
 			/*
 			 * An operating point marked with opp-suspend will be set when the system
@@ -71,11 +71,12 @@
 		};
 		opp1_3GHz: opp@1296000000 {
 			opp-hz = /bits/ 64 <1296000000>;
-			opp-microvolt = <1050000>;
+			opp-microvolt = <1075000>;
 		};
+
 		opp1_4GHz: opp@1416000000 {
 			opp-hz = /bits/ 64 <1416000000>;
-			opp-microvolt = <1100000>;
+			opp-microvolt = <1150000>;
 		};
 	};
 
