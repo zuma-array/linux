@@ -88,6 +88,14 @@
 #define ES9018_DPLL_BW_DSD_MASK (0x0F)
 #define ES9018_DPLL_BW_I2S_MASK (0xF0)
 
+#define ES9018_CHANNELMAP_CHSEL_MASK (0x03)
+
+#define ES9018_CHANNELMAP_CH1_LEFT	(0)
+#define ES9018_CHANNELMAP_CH1_RIGHT	(1)
+
+#define ES9018_CHANNELMAP_CH2_LEFT	(0)
+#define ES9018_CHANNELMAP_CH2_RIGHT	(1 << 1)
+
 struct es9018_private {
 	struct regmap	*regmap;
 	unsigned int	format;
@@ -149,8 +157,23 @@ static const struct snd_kcontrol_new es9018_controls[] = {
 	SOC_ENUM("Audio Polarity", es9018_analog_polarity),
 };
 
+static int es9018_hw_params(struct snd_pcm_substream *substream, struct snd_pcm_hw_params *params, struct snd_soc_dai *dai)
+{
+	struct snd_soc_codec *codec = dai->codec;
+
+	/* Swap the channels when playing DSD, this is done to be hardware compatible with other DSD DACs */
+	if (is_dsd(params_format(params))) {
+		snd_soc_update_bits(codec, ES9018_CHANNELMAP, ES9018_CHANNELMAP_CHSEL_MASK, ES9018_CHANNELMAP_CH1_RIGHT | ES9018_CHANNELMAP_CH2_LEFT);
+	} else {
+		snd_soc_update_bits(codec, ES9018_CHANNELMAP, ES9018_CHANNELMAP_CHSEL_MASK, ES9018_CHANNELMAP_CH1_LEFT | ES9018_CHANNELMAP_CH2_RIGHT);
+	}
+
+	return 0;
+}
+
 static const struct snd_soc_dai_ops es9018_dai_ops = {
 	.digital_mute	= es9018_digital_mute,
+	.hw_params	= es9018_hw_params,
 };
 
 static struct snd_soc_dai_driver es9018_dai = {
