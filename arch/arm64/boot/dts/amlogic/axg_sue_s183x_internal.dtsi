@@ -74,10 +74,16 @@
 			opp-microvolt = <1075000>;
 		};
 
+		/*
+		 * The 1.4 GHz operating point is intentionally disabled since VDDCPU is 50 mV above
+		 * the recommended operating conditions.
+		 */
+		/*
 		opp1_4GHz: opp@1416000000 {
 			opp-hz = /bits/ 64 <1416000000>;
 			opp-microvolt = <1150000>;
 		};
+		*/
 	};
 
 
