@@ -206,7 +206,7 @@ static void aml_pdm_filters_config(int osr,
 	f1_tap_num	 = lpf1_len;
 	f2_tap_num	 = lpf2_len;
 	f3_tap_num	 = lpf3_len;
-	hpf_shift_step = 0xd;
+	hpf_shift_step = 0x0;
 	hpf_en		 = 1;
 	pdm_out_mode	 = 0;
 	hpf_out_factor = 0x8000;
