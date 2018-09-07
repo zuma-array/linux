@@ -38,26 +38,32 @@
 		opp96MHz: opp@96000000 {
 			opp-hz = /bits/ 64 <96000000>;
 			opp-microvolt = <850000>;
+			clock-latency-ns = <200>;
 		};
 		opp264MHz: opp@264000000 {
 			opp-hz = /bits/ 64 <264000000>;
 			opp-microvolt = <850000>;
+			clock-latency-ns = <200>;
 		};
 		opp504MHz: opp@504000000 {
 			opp-hz = /bits/ 64 <504000000>;
 			opp-microvolt = <850000>;
+			clock-latency-ns = <200>;
 		};
 		opp672MHz: opp@672000000 {
 			opp-hz = /bits/ 64 <672000000>;
 			opp-microvolt = <850000>;
+			clock-latency-ns = <200>;
 		};
 		opp768MHz: opp@768000000 {
 			opp-hz = /bits/ 64 <768000000>;
 			opp-microvolt = <950000>;
+			clock-latency-ns = <200>;
 		};
 		opp1_2GHz: opp@1176000000 {
 			opp-hz = /bits/ 64 <1176000000>;
 			opp-microvolt = <1050000>;
+			clock-latency-ns = <200>;
 
 			/*
 			 * An operating point marked with opp-suspend will be set when the system
@@ -72,6 +78,7 @@
 		opp1_3GHz: opp@1344000000 {
 			opp-hz = /bits/ 64 <1344000000>;
 			opp-microvolt = <1075000>;
+			clock-latency-ns = <200>;
 		};
 
 		/*
@@ -82,6 +89,7 @@
 		opp1_5GHz: opp@1512000000 {
 			opp-hz = /bits/ 64 <1416000000>;
 			opp-microvolt = <1150000>;
+			clock-latency-ns = <200>;
 		};
 		*/
 	};
