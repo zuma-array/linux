@@ -75,6 +75,12 @@ struct imx2_wdt_device {
 	struct watchdog_device wdog;
 	struct notifier_block restart_handler;
 	bool wdog_b;
+
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *pins_default;
+
+	bool noreset;
+	struct pinctrl_state *pins_reset;
 };
 
 static bool nowayout = WATCHDOG_NOWAYOUT;
@@ -105,6 +111,7 @@ static const struct watchdog_info imx2_wdt_info = {
 static int imx2_restart_handler(struct notifier_block *this, unsigned long mode,
 				void *cmd)
 {
+	int ret;
 	u32 reg;
 	void __iomem *snvs_reg = ioremap(SNVS_REG_ADDR, SZ_4K);
 
@@ -118,6 +125,21 @@ static int imx2_restart_handler(struct notifier_block *this, unsigned long mode,
 	reg = readl(snvs_reg);
 	reg |= (1 << FWUP_FLAG_SWRESET_REQ);
 	writel(reg, snvs_reg);
+
+	if (!IS_ERR(wdev->pins_reset)) {
+		ret = pinctrl_select_state(wdev->pinctrl, wdev->pins_reset);
+		if (ret < 0) {
+			printk(KERN_ERR "failed to select reset pin state\n");
+		} else {
+			printk(KERN_INFO "selected reset pin state\n");
+		}
+	}
+
+	/* If this flag is set than some later handler (e.g. axp20x) will perform the reset */
+	if (wdev->noreset) {
+		printk(KERN_INFO "reset will not be done using the watchdog\n");
+		return NOTIFY_DONE;
+	}
 
 	/* Assert WDOG_B signal */
 	if (wdev->wdog_b)
@@ -345,6 +367,31 @@ static int __init imx2_wdt_probe(struct platform_device *pdev)
 	if (of_get_property(of_node, "fsl,wdog_b", NULL)) {
 		wdev->wdog_b = true;
 		dev_info(&pdev->dev, "use WDOG_B to reboot.\n");
+	}
+
+
+	wdev->pinctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(wdev->pinctrl)) {
+		dev_err(&pdev->dev, "failed to get pinctrl\n");
+	}
+
+	wdev->pins_default = pinctrl_lookup_state(wdev->pinctrl, PINCTRL_STATE_DEFAULT);
+	if (IS_ERR(wdev->pins_default)) {
+		dev_err(&pdev->dev, "failed to get default pins from device-tree\n");
+	}
+
+	if (of_get_property(of_node, "sue,noreset", NULL)) {
+		wdev->noreset = true;
+	}
+
+	wdev->pins_reset = pinctrl_lookup_state(wdev->pinctrl, "reset");
+	if (IS_ERR(wdev->pins_reset)) {
+		dev_err(&pdev->dev, "failed to get gpio pins from device-tree\n");
+	}
+
+	ret = pinctrl_select_state(wdev->pinctrl, wdev->pins_default);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "failed to select default pin state\n");
 	}
 
 	wdog			= &wdev->wdog;
