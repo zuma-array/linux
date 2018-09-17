@@ -26,6 +26,9 @@
 #include <linux/of_device.h>
 #include <linux/of_irq.h>
 #include <linux/acpi.h>
+#include <linux/reboot.h>
+#include <linux/of_gpio.h>
+#include <linux/delay.h>
 
 #define AXP20X_OFF	0x80
 
@@ -579,6 +582,8 @@ static struct mfd_cell axp288_cells[] = {
 	},
 };
 
+static struct gpio_desc *reset_wakeup_gpio;
+static struct notifier_block axp20x_restart_handler;
 static struct axp20x_dev *axp20x_pm_power_off;
 static void axp20x_power_off(void)
 {
@@ -604,6 +609,33 @@ static void axp20x_power_off(void)
 
 	regmap_write(axp20x_pm_power_off->regmap, AXP20X_OFF_CTRL,
 		     AXP20X_OFF);
+}
+
+static int axp20x_restart_handler_call(struct notifier_block *this, unsigned long mode, void *cmd)
+{
+	/* Set POWEROK low for 64 ms on wakeup */
+	regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_PEK_KEY, (1 << 2), (1 << 2));
+
+	/* 1. Configure PWREN to be a wakeup source posedge triggered (GPIO3) */
+	regmap_write(axp20x_pm_power_off->regmap, AXP152_GPIO3_CTRL, (1 << 7) | (1 << 3) | (3 << 0));
+	regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_IRQ3_EN, (1 << 3), (1 << 3));
+
+	/*
+	 * 2. Pull the corresponding i.MX GPIO low (this was the WDOG_B pin, which was reconfigured
+	 * to be a GPIO in the imx2_restart_handler() in the watchdog driver.
+	 */
+	gpiod_set_value(reset_wakeup_gpio, 0);
+
+	/* 3. Tell the AXP to enable toggeling of PWROK (CPU RESET) and enable power recovery */
+	regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_V_OFF, (1 << 7), (1 << 7));
+	regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_V_OFF, (1 << 3), (1 << 3));
+
+	mdelay(50);
+
+	/* 4. wakeup the AXP again, this will create a reset pulse on the POWEROK line, thus resetting the CPU */
+	gpiod_set_value(reset_wakeup_gpio, 1);
+
+	return NOTIFY_DONE;
 }
 
 static int axp20x_match_device(struct axp20x_dev *axp20x, struct device *dev)
@@ -705,6 +737,11 @@ static int axp20x_i2c_probe(struct i2c_client *i2c,
 		}
 	}
 
+	/* Set some regs to a default value, this regs are changed on a reboot */
+	regmap_write(axp20x->regmap, AXP152_GPIO3_CTRL, 0x07);
+	regmap_write(axp20x->regmap, AXP152_IRQ3_EN, 0x00);
+	regmap_write(axp20x->regmap, AXP152_V_OFF, 0x07);
+
 	ret = mfd_add_devices(axp20x->dev, -1, axp20x->cells,
 			axp20x->nr_cells, NULL, 0, NULL);
 
@@ -720,6 +757,20 @@ static int axp20x_i2c_probe(struct i2c_client *i2c,
 	if (!pm_power_off) {
 		axp20x_pm_power_off = axp20x;
 		pm_power_off = axp20x_power_off;
+	}
+
+
+	reset_wakeup_gpio = gpiod_get_optional(&i2c->dev, "reset-wakeup", GPIOD_OUT_HIGH);
+	if (IS_ERR_OR_NULL(reset_wakeup_gpio)) {
+		dev_warn(&i2c->dev, "could not get wakeup GPIO\n");
+	} else {
+		axp20x_restart_handler.notifier_call = axp20x_restart_handler_call;
+		axp20x_restart_handler.priority = 127;
+		ret = register_restart_handler(&axp20x_restart_handler);
+		if (ret) {
+			dev_err(&i2c->dev, "failed to register restart handler");
+			return ret;
+		}
 	}
 
 	dev_info(&i2c->dev, "AXP20X driver loaded\n");
