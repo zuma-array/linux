@@ -184,6 +184,9 @@
 		reg = <0x32>;
 		no-irq;
 
+		/* when this pin is set the axp driver will perform a reset by toggeling the wakeup pin */
+		reset-wakeup-gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>;
+
 		regulators {
 			vdd_arm: dcdc4 {
 				regulator-name = "vdd_arm";
@@ -365,6 +368,13 @@
 				MX7D_PAD_GPIO1_IO00__WDOD1_WDOG_B 0x74
 			>;
 		};
+
+		pinctrl_wdog1_gpio: wdog1grp_gpio {
+			fsl,pins = <
+				MX7D_PAD_GPIO1_IO00__GPIO1_IO0 0x14
+			>;
+		};
+
 	};
 };
 
@@ -443,7 +453,11 @@
 };
 
 &wdog1 {
+	/* The reset pinctrl will be selected before performing a reset */
+	pinctrl-names = "default", "reset";
 	pinctrl-0 = <&pinctrl_wdog1>;
-	fsl,wdog_b;
+	pinctrl-1 = <&pinctrl_wdog1_gpio>;
+
+	sue,noreset;
 	status = "okay";
 };
