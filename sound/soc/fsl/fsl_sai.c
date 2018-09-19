@@ -359,12 +359,11 @@ void fsl_sai_set_cr4_cr5(struct fsl_sai *sai, bool tx, u32 word_width, u32 slot_
 	regmap_write(sai->regmap, FSL_SAI_xMR(tx), ~0UL - ((1 << channels) - 1));
 }
 
-static int fsl_sai_init_continuous_clock(struct snd_soc_dai *cpu_dai, bool tx)
+static int fsl_sai_init_continuous_clock(struct snd_soc_dai *cpu_dai, bool tx, unsigned int rate)
 {
 	struct fsl_sai *sai = snd_soc_dai_get_drvdata(cpu_dai);
 
 	unsigned int channels = 2;
-	unsigned int rate = 48000;
 	int ret, i;
 
 	/* We can only output clocks on boot in master mode */
@@ -379,7 +378,6 @@ static int fsl_sai_init_continuous_clock(struct snd_soc_dai *cpu_dai, bool tx)
 	if (ret)
 		return ret;
 
-	dev_info(cpu_dai->dev, "called init continous_clock for %s\n", tx ? "tx" : "rx");
 	fsl_sai_set_cr4_cr5(sai, tx, sai->slot_width, sai->slot_width, channels);
 
 
@@ -403,6 +401,7 @@ static int fsl_sai_init_continuous_clock(struct snd_soc_dai *cpu_dai, bool tx)
 	regmap_update_bits(sai->regmap, FSL_SAI_TCSR,
 			   FSL_SAI_CSR_TERE, FSL_SAI_CSR_TERE);
 
+	dev_info(cpu_dai->dev, "continous_clock init done for %s\n", tx ? "tx" : "rx");
 
 	return 0;
 }
@@ -593,8 +592,8 @@ static int fsl_sai_set_dai_fmt_tr(struct snd_soc_dai *cpu_dai,
 	 */
 	if (sai->continuous_clock && !sai->continuous_clock_init_done) {
 		/* Enable continuous clock for Tx and Rx */
-		ret = fsl_sai_init_continuous_clock(cpu_dai, true);
-		ret = fsl_sai_init_continuous_clock(cpu_dai, false);
+		ret = fsl_sai_init_continuous_clock(cpu_dai, true, 48000);
+		ret = fsl_sai_init_continuous_clock(cpu_dai, false, 48000);
 		sai->continuous_clock_init_done = true;
 
 		if (ret < 0) {
@@ -668,6 +667,24 @@ static int fsl_sai_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	fsl_sai_set_cr4_cr5(sai, tx, word_width, slot_width, sai->slots);
+
+	/*
+	 * We need to reset the SAI on stop under the following circumstances:
+	 * 	1. When in TX mode
+	 * 	2. and continous_clock is enabled
+	 * 	3. and either playing DSD or PCM with high sample rates (192 kHz and up)
+	 *
+	 * If we do not do that the SAI can sometimes be stuck in a state where
+	 * it does not generate any word clock anymore.
+	 */
+	sai->reset_tx_sai_on_stop = false;
+	if (sai->continuous_clock && tx &&
+		(params_rate(params) >= 192000 || sai->is_pdm_mode)) {
+		sai->reset_tx_sai_on_stop = true;
+
+		/* Restore the previous rate except for DSD, there we restore the clocks to 48kHz */
+		sai->reset_tx_rate = sai->is_pdm_mode ? 48000 : params_rate(params);
+	}
 
 	return 0;
 }
@@ -840,6 +857,7 @@ static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 	struct fsl_sai *sai = snd_soc_dai_get_drvdata(cpu_dai);
 	bool tx = substream->stream == SNDRV_PCM_STREAM_PLAYBACK;
 	u32 xcsr;
+	int ret;
 
 	/*
 	 * Asynchronous mode: Clear SYNC for both Tx and Rx.
@@ -881,6 +899,17 @@ static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 				fsl_sai_stop(sai, true, true);
 			}
 		}
+
+		if (sai->reset_tx_sai_on_stop) {
+			/* Stop Tx only */
+			fsl_sai_stop(sai, true, false);
+			/* And restart the continous_clock() */
+			ret = fsl_sai_init_continuous_clock(cpu_dai, true, sai->reset_tx_rate);
+			if (ret < 0) {
+				dev_warn(cpu_dai->dev, "failed to re-init continuous clock\n");
+			}
+		}
+
 		break;
 	default:
 		return -EINVAL;
@@ -929,24 +958,6 @@ static void fsl_sai_shutdown(struct snd_pcm_substream *substream,
 	int ret;
 	struct fsl_sai *sai = snd_soc_dai_get_drvdata(cpu_dai);
 	bool tx = substream->stream == SNDRV_PCM_STREAM_PLAYBACK;
-
-	/*
-	 * There seems to be a hardware issue that when we go from DSD128 to PCM 192 kHz
-	 * there will be no word clock. For this reason we need to a reset when we
-	 * stop the playback of DSD audio. After the stop/reset we re-enable the continous
-	 * clocks.
-	 */
-	if (tx && sai->is_pdm_mode && sai->continuous_clock) {
-		/* Stop Tx only */
-		fsl_sai_stop(sai, true, false);
-		udelay(20);
-
-		/* Restart continous clocks for Tx only */
-		ret = fsl_sai_init_continuous_clock(cpu_dai, true);
-		if (ret < 0) {
-			dev_warn(cpu_dai->dev, "failed to re-init continuous clock\n");
-		}
-	}
 
 	if (sai->is_stream_opened[tx]) {
 		if (!sai->continuous_clock) {

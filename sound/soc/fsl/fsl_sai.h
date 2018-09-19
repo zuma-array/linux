@@ -164,6 +164,9 @@ struct fsl_sai {
 	bool is_pdm_sync_slave;
 	struct fsl_sai *pdm_sync_slave;
 
+	bool reset_tx_sai_on_stop;
+	unsigned int reset_tx_rate;
+
 #ifdef CONFIG_SUE_HWCOUNTER_MX7
 	struct hwcounter_data *hwcounter;
 	struct hrtimer trigger_hrtimer;
