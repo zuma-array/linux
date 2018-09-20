@@ -112,6 +112,16 @@ Optional properties:
 - opp-microamp-<name>: Named opp-microamp property. Similar to
   opp-microvolt-<name> property, but for microamp instead.
 
+- opp-workmode: The regulator workmode which will be selected on transition to/from
+  this opp. Valid values are:
+	1: REGULATOR_MODE_FAST
+	2: REGULATOR_MODE_NORMAL
+	4: REGULATOR_MODE_IDLE
+	8: REGULATOR_MODE_STANDBY
+  See include/linux/regulator/consumer.h for a description of those constants, note
+  that not all regulators implement all modes. If not opp-workmode is specified the
+  REGULATOR_MODE_NORMAL is assumed.
+
 - clock-latency-ns: Specifies the maximum possible transition latency (in
   nanoseconds) for switching to this OPP from any other OPP.
 

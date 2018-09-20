@@ -175,6 +175,10 @@ static int opp_parse_supplies(struct dev_pm_opp *opp, struct device *dev,
 	if (prop && !of_property_read_u32(opp->np, name, &val))
 		opp->u_amp = val;
 
+	prop = of_find_property(opp->np, "opp-workmode", NULL);
+	if (prop && !of_property_read_u32(opp->np, "opp-workmode", &val))
+		opp->workmode = val;
+
 	return 0;
 }
 
