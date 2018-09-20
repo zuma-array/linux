@@ -136,6 +136,11 @@ static void of_get_regulation_constraints(struct device_node *np,
 		}
 	}
 
+	if (!of_property_read_u32(np, "regulator-allowed-modes", &pval)) {
+		constraints->valid_modes_mask = pval;
+		constraints->valid_ops_mask |= REGULATOR_CHANGE_MODE;
+	}
+
 	if (!of_property_read_u32(np, "regulator-system-load", &pval))
 		constraints->system_load = pval;
 
