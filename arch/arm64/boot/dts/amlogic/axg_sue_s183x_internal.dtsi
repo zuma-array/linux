@@ -64,6 +64,7 @@
 			opp-hz = /bits/ 64 <1176000000>;
 			opp-microvolt = <1050000>;
 			clock-latency-ns = <200>;
+			opp-workmode = <1>; /* 1: REGULATOR_MODE_FAST => PWM only mode on AXP152 */
 
 			/*
 			 * An operating point marked with opp-suspend will be set when the system
@@ -79,6 +80,7 @@
 			opp-hz = /bits/ 64 <1344000000>;
 			opp-microvolt = <1075000>;
 			clock-latency-ns = <200>;
+			opp-workmode = <1>; /* 1: REGULATOR_MODE_FAST => PWM only mode on AXP152 */
 		};
 
 		/*
@@ -90,6 +92,7 @@
 			opp-hz = /bits/ 64 <1416000000>;
 			opp-microvolt = <1150000>;
 			clock-latency-ns = <200>;
+			opp-workmode = <1>;
 		};
 		*/
 	};
@@ -625,7 +628,13 @@
 				regulator-max-microvolt = <1150000>;
 				regulator-boot-on;
 				regulator-always-on;
-				x-powers,dcdc-workmode = <1>;
+
+				/*
+				 * Allow the following workmodes (OR'ed together):
+				 *   1: REGULATOR_MODE_FAST	=> PWM only mode
+				 *   2: REGULATOR_MODE_NORMAL	=> Auto mode
+				 */
+				regulator-allowed-modes = <3>;
 			};
 
 			out_3v3: ldo0 {
