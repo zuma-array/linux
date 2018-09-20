@@ -585,6 +585,7 @@ int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq)
 	unsigned long freq, old_freq;
 	unsigned long u_volt, u_volt_min, u_volt_max;
 	unsigned long old_u_volt, old_u_volt_min, old_u_volt_max;
+	unsigned int old_workmode;
 	int ret;
 
 	if (unlikely(!target_freq)) {
@@ -636,10 +637,12 @@ int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq)
 
 	if (IS_ERR(old_opp)) {
 		old_u_volt = 0;
+		old_workmode = 0;
 	} else {
 		old_u_volt = old_opp->u_volt;
 		old_u_volt_min = old_opp->u_volt_min;
 		old_u_volt_max = old_opp->u_volt_max;
+		old_workmode = old_opp->workmode;
 	}
 
 	u_volt = opp->u_volt;
@@ -652,6 +655,13 @@ int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq)
 
 	/* Scaling up? Scale voltage before frequency */
 	if (freq >= old_freq) {
+		if (old_workmode != opp->workmode) {
+			ret = regulator_set_mode(reg, opp->workmode == 0 ? REGULATOR_MODE_NORMAL : opp->workmode);
+
+			if (ret)
+				goto restore_voltage;
+		}
+
 		ret = _set_opp_voltage(dev, reg, u_volt, u_volt_min,
 				       u_volt_max);
 		if (ret)
@@ -676,6 +686,13 @@ int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq)
 				       u_volt_max);
 		if (ret)
 			goto restore_freq;
+
+		if (old_workmode != opp->workmode) {
+			ret = regulator_set_mode(reg, opp->workmode == 0 ? REGULATOR_MODE_NORMAL : opp->workmode);
+
+			if (ret)
+				goto restore_freq;
+		}
 	}
 
 	return 0;
