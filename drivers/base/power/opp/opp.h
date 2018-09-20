@@ -81,6 +81,7 @@ struct dev_pm_opp {
 	struct dev_pm_opp_supply *supplies;
 
 	unsigned long clock_latency_ns;
+	unsigned int  workmode;
 
 	struct opp_table *opp_table;
 

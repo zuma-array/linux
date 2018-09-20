@@ -227,6 +227,10 @@ static int opp_parse_supplies(struct dev_pm_opp *opp, struct device *dev,
 			opp->supplies[i].u_amp = microamp[i];
 	}
 
+	prop = of_find_property(opp->np, "opp-workmode", NULL);
+	if (prop && !of_property_read_u32(opp->np, "opp-workmode", &val))
+		opp->workmode = val;
+
 free_microamp:
 	kfree(microamp);
 free_microvolt:
