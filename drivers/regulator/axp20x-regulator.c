@@ -133,6 +133,8 @@ static struct regulator_ops axp20x_ops_fixed = {
 	.list_voltage		= regulator_list_voltage_linear,
 };
 
+int axp20x_set_mode(struct regulator_dev *dev, unsigned int mode);
+
 static struct regulator_ops axp20x_ops_range = {
 	.set_voltage_sel	= regulator_set_voltage_sel_regmap,
 	.get_voltage_sel	= regulator_get_voltage_sel_regmap,
@@ -142,6 +144,7 @@ static struct regulator_ops axp20x_ops_range = {
 	.is_enabled		= regulator_is_enabled_regmap,
 	.set_suspend_enable	= regulator_enable_regmap,
 	.set_suspend_disable	= regulator_disable_regmap,
+	.set_mode		= axp20x_set_mode,
 };
 
 static struct regulator_ops axp20x_ops = {
@@ -153,6 +156,7 @@ static struct regulator_ops axp20x_ops = {
 	.is_enabled		= regulator_is_enabled_regmap,
 	.set_suspend_enable	= regulator_enable_regmap,
 	.set_suspend_disable	= regulator_disable_regmap,
+	.set_mode		= axp20x_set_mode,
 };
 
 static struct regulator_ops axp20x_ops_sw = {
@@ -484,6 +488,8 @@ static int axp20x_set_dcdc_workmode(struct regulator_dev *rdev, int id, u32 work
 	unsigned int reg = AXP20X_DCDC_MODE;
 	unsigned int mask;
 
+	dev_info(&rdev->dev, "Setting workmode for %s to %s\b", rdev->desc->name, workmode == 1 ? "PWM" : "auto");
+
 	switch (axp20x->variant) {
 	case AXP152_ID:
 		if (id < AXP152_DCDC1 || id > AXP152_DCDC4)
@@ -529,6 +535,24 @@ static int axp20x_set_dcdc_workmode(struct regulator_dev *rdev, int id, u32 work
 	}
 
 	return regmap_update_bits(rdev->regmap, reg, mask, workmode);
+}
+
+int axp20x_set_mode(struct regulator_dev *dev, unsigned int mode)
+{
+	switch(mode) {
+	case REGULATOR_MODE_FAST:
+		return axp20x_set_dcdc_workmode(dev, dev->desc->id, 1);
+		break;
+	case REGULATOR_MODE_NORMAL:
+		return axp20x_set_dcdc_workmode(dev, dev->desc->id, 0);
+		break;
+	case REGULATOR_MODE_IDLE:
+	case REGULATOR_MODE_STANDBY:
+		return -EINVAL;
+		break;
+	}
+
+	return 0;
 }
 
 /*
