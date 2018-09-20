@@ -209,6 +209,19 @@ properties:
     $ref: "/schemas/types.yaml#/definitions/uint32"
     enum: [0, 1]
 
+  regulator-allowed-modes: 
+    description: |
+      Allowed operating modes for the regulator, the value
+      is OR'ed together with the following bits:
+        1: REGULATOR_MODE_FAST
+        2: REGULATOR_MODE_NORMAL
+        4: REGULATOR_MODE_IDLE
+        8: REGULATOR_MODE_STANDBY
+      See include/linux/regulator/consumer.h for a description of those constants, note
+      that not all regulators implement all modes.
+    minimum: 0
+    maximum: 15
+
   regulator-coupled-with:
     description: Regulators with which the regulator is coupled. The linkage
       is 2-way - all coupled regulators should be linked with each other.
