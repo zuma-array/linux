@@ -539,6 +539,8 @@ static int _generic_set_opp_regulator(const struct opp_table *opp_table,
 				      struct device *dev,
 				      unsigned long old_freq,
 				      unsigned long freq,
+				      unsigned int old_workmode,
+				      unsigned int workmode,
 				      struct dev_pm_opp_supply *old_supply,
 				      struct dev_pm_opp_supply *new_supply)
 {
@@ -553,6 +555,13 @@ static int _generic_set_opp_regulator(const struct opp_table *opp_table,
 
 	/* Scaling up? Scale voltage before frequency */
 	if (freq >= old_freq) {
+		if (old_workmode != workmode) {
+			ret = regulator_set_mode(reg, workmode == 0 ? REGULATOR_MODE_NORMAL : workmode);
+
+			if (ret)
+				goto restore_voltage;
+		}
+
 		ret = _set_opp_voltage(dev, reg, new_supply);
 		if (ret)
 			goto restore_voltage;
@@ -568,6 +577,13 @@ static int _generic_set_opp_regulator(const struct opp_table *opp_table,
 		ret = _set_opp_voltage(dev, reg, new_supply);
 		if (ret)
 			goto restore_freq;
+
+		if (old_workmode != workmode) {
+			ret = regulator_set_mode(reg, workmode == 0 ? REGULATOR_MODE_NORMAL : workmode);
+
+			if (ret)
+				goto restore_freq;
+		}
 	}
 
 	return 0;
@@ -598,6 +614,7 @@ int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq)
 	unsigned long freq, old_freq;
 	struct dev_pm_opp *old_opp, *opp;
 	struct clk *clk;
+	unsigned int old_workmode;
 	int ret, size;
 
 	if (unlikely(!target_freq)) {
@@ -651,11 +668,17 @@ int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq)
 	dev_dbg(dev, "%s: switching OPP: %lu Hz --> %lu Hz\n", __func__,
 		old_freq, freq);
 
+        if (IS_ERR(old_opp))
+                old_workmode = 0;
+        else
+                old_workmode = old_opp->workmode;
+
 	/* Only frequency scaling */
 	if (!opp_table->regulators) {
 		ret = _generic_set_opp_clk_only(dev, clk, old_freq, freq);
 	} else if (!opp_table->set_opp) {
 		ret = _generic_set_opp_regulator(opp_table, dev, old_freq, freq,
+						 old_workmode, opp->workmode,
 						 IS_ERR(old_opp) ? NULL : old_opp->supplies,
 						 opp->supplies);
 	} else {
