@@ -88,6 +88,7 @@ struct dev_pm_opp {
 	unsigned long u_volt_max;
 	unsigned long u_amp;
 	unsigned long clock_latency_ns;
+	unsigned int  workmode;
 
 	struct opp_table *opp_table;
 	struct rcu_head rcu_head;
