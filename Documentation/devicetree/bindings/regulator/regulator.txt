@@ -49,6 +49,14 @@ Optional properties:
 	0: Disable active discharge.
 	1: Enable active discharge.
 	Absence of this property will leave configuration to default.
+- regulator-allowed-modes: Allowed operating modes for the regulator, the value
+  is OR'ed together with the following bits:
+	1: REGULATOR_MODE_FAST
+	2: REGULATOR_MODE_NORMAL
+	4: REGULATOR_MODE_IDLE
+	8: REGULATOR_MODE_STANDBY
+  See include/linux/regulator/consumer.h for a description of those constants, note
+  that not all regulators implement all modes.
 
 Deprecated properties:
 - regulator-compatible: If a regulator chip contains multiple
