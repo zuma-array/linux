@@ -583,7 +583,7 @@ static int opp_parse_supplies(struct dev_pm_opp *opp, struct device *dev,
 {
 	u32 *microvolt, *microamp = NULL, *microwatt = NULL;
 	int supplies = opp_table->regulator_count;
-	int vcount, icount, pcount, ret, i, j;
+	int vcount, icount, pcount, workmode, ret, i, j;
 	struct property *prop = NULL;
 	char name[NAME_MAX];
 
@@ -731,6 +731,11 @@ static int opp_parse_supplies(struct dev_pm_opp *opp, struct device *dev,
 			goto free_microwatt;
 		}
 	}
+
+	sprintf(name, "opp-workmode");
+	prop = of_find_property(opp->np, name, NULL);
+	if (prop && !of_property_read_u32(opp->np, "opp-workmode", &workmode))
+		opp->workmode = workmode;
 
 	for (i = 0, j = 0; i < supplies; i++) {
 		opp->supplies[i].u_volt = microvolt[j++];
