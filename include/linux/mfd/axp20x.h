@@ -417,6 +417,8 @@ struct axp20x_dev {
 	const struct regmap_config	*regmap_cfg;
 	const struct regmap_irq_chip	*regmap_irq_chip;
 	int				irq;
+	int				default_workmode_config;
+	int				reset_workmode_config;
 };
 
 #define BATTID_LEN				64

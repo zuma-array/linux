@@ -613,6 +613,12 @@ static void axp20x_power_off(void)
 
 static int axp20x_restart_handler_call(struct notifier_block *this, unsigned long mode, void *cmd)
 {
+	/* Set the DCDC workmodes to the desired state before resetting */
+	if (axp20x_pm_power_off->reset_workmode_config != -1) {
+		regmap_update_bits(axp20x_pm_power_off->regmap, AXP20X_DCDC_MODE,
+					0x0F, axp20x_pm_power_off->reset_workmode_config);
+	}
+
 	/* Set POWEROK low for 64 ms on wakeup */
 	regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_PEK_KEY, (1 << 2), (1 << 2));
 
@@ -711,6 +717,14 @@ static int axp20x_i2c_probe(struct i2c_client *i2c,
 	else
 		axp20x->irq = i2c->irq;
 
+	ret = of_property_read_u32(np, "reset-workmode-config", &axp20x->reset_workmode_config);
+	if (ret)
+		axp20x->reset_workmode_config = -1;
+
+	ret = of_property_read_u32(np, "default-workmode-config", &axp20x->default_workmode_config);
+	if (ret)
+		axp20x->default_workmode_config = -1;
+
 	ret = axp20x_match_device(axp20x, &i2c->dev);
 	if (ret)
 		return ret;
@@ -741,6 +755,11 @@ static int axp20x_i2c_probe(struct i2c_client *i2c,
 	regmap_write(axp20x->regmap, AXP152_GPIO3_CTRL, 0x07);
 	regmap_write(axp20x->regmap, AXP152_IRQ3_EN, 0x00);
 	regmap_write(axp20x->regmap, AXP152_V_OFF, 0x07);
+
+	/* Restore the DCDC workmodes to the desired state */
+	if (axp20x->default_workmode_config != -1) {
+		regmap_update_bits(axp20x->regmap, AXP20X_DCDC_MODE, 0x0F, axp20x->default_workmode_config);
+	}
 
 	ret = mfd_add_devices(axp20x->dev, -1, axp20x->cells,
 			axp20x->nr_cells, NULL, 0, NULL);

@@ -27,6 +27,17 @@ Optional properties:
 	      See Documentation/devicetree/bindings/regulator/regulator.txt
 	      for more information on standard regulator bindings.
 
+- reset-wakeup-gpios: Specify which GPIO from the CPU is connected to the PWRON
+  pin of the AXP. If this property is specified the driver will register a reboot
+  handler and perform the reset by toggeling the wakeup GPIO to let the AXP
+  generate a proper pulse on the PWROK (CPU reset) line.
+
+- reset-dcdc-workmodes: Specify the workmode of the DCDC converters before
+  performing the reset. The value is directly written to the DCDC workmode register.
+
+- default-workmode-config: Specify the default workmode settings applied on
+  boot.
+
 Optional properties for DCDC regulators:
 - x-powers,dcdc-workmode: 1 for PWM mode, 0 for AUTO (PWM/PFM) mode
 			  Default: Current hardware setting
