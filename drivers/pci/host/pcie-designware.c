@@ -759,6 +759,8 @@ static struct pci_bus *dw_pcie_scan_bus(int nr, struct pci_sys_data *sys)
 	if (!bus)
 		return NULL;
 
+	pp->root_bus_domain_nr = pci_domain_nr(bus);
+
 	pci_scan_child_bus(bus);
 
 	if (bus && pp->ops->scan_bus)
