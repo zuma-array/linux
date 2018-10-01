@@ -50,6 +50,7 @@ static struct memory_type_mapping mem_type_mapping_tbl[] = {
 
 /* Indicate if load FW in MFG (testing) mode */
 static int mfg_mode = 0;
+static int fw_dump_enabled = 0;
 
 static int
 mwifiex_map_pci_memory(struct mwifiex_adapter *adapter, struct sk_buff *skb,
@@ -2438,6 +2439,14 @@ static DECLARE_WORK(pcie_work, mwifiex_pcie_work);
 /* This function dumps FW information */
 static void mwifiex_pcie_fw_dump(struct mwifiex_adapter *adapter)
 {
+	struct pcie_service_card *card = adapter->card;
+	struct pci_dev *pdev = card->dev;
+
+	if (fw_dump_enabled == 0) {
+		dev_info(&pdev->dev, "Skipping fw_dump()\n");
+		return;
+	}
+
 	save_adapter = adapter;
 	if (test_bit(MWIFIEX_IFACE_WORK_FW_DUMP, &iface_work_flags))
 		return;
@@ -2746,6 +2755,10 @@ module_exit(mwifiex_pcie_cleanup_module);
 module_param(mfg_mode, int, 0);
 MODULE_PARM_DESC(mfg_mode,
 		"0: Download normal firmware; 1: Download MFG firmware");
+
+module_param(fw_dump_enabled, int, 0);
+MODULE_PARM_DESC(fw_dump_enabled,
+		"0: Disable dumping of fw status on crash; 1: Enable dumping of fw status on crash");
 
 MODULE_AUTHOR("Marvell International Ltd.");
 MODULE_DESCRIPTION("Marvell WiFi-Ex PCI-Express Driver version " PCIE_VERSION);
