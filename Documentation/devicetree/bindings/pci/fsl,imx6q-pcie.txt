@@ -13,6 +13,10 @@ Required properties:
 - clock-names: Must include the following additional entries:
 	- "pcie_phy"
 
+Optional properties:
+- pcie-dev-supply: A reference to a voltage regulator which will be enabled on
+  boot and toggeled during a reset.
+
 Example:
 
 	pcie@0x01000000 {

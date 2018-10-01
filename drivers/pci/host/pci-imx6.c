@@ -62,6 +62,7 @@ struct imx6_pcie {
 
 	bool			in_suspend;
 	struct mutex		pm_lock;
+	struct regulator	*pcie_dev_regulator;
 };
 
 /* PCIe Root Complex registers (memory-mapped) */
@@ -1007,7 +1008,6 @@ static void imx6_pcie_setup_ep(struct pcie_port *pp)
 		writel(0, pp->dbi_base + (1 << 12) + PCI_BASE_ADDRESS_5);
 }
 
-#ifdef CONFIG_PM_SLEEP
 /* PM_TURN_OFF */
 static void pci_imx_pm_turn_off(struct imx6_pcie *imx6_pcie)
 {
@@ -1039,6 +1039,7 @@ static void pci_imx_pm_turn_off(struct imx6_pcie *imx6_pcie)
 		gpio_set_value_cansleep(imx6_pcie->reset_gpio, 0);
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int pci_imx_suspend_noirq(struct device *dev)
 {
 	struct imx6_pcie *imx6_pcie = dev_get_drvdata(dev);
@@ -1218,9 +1219,90 @@ static ssize_t imx_pci_suspend_show(struct device *dev, struct device_attribute 
 }
 
 static DEVICE_ATTR(suspend, S_IRUGO | S_IWUSR, imx_pci_suspend_show, imx_pci_suspend_store);
+#endif
+
+static int imx_pci_reset(struct imx6_pcie *imx6_pcie)
+{
+	struct pcie_port *pp = &imx6_pcie->pp;
+	struct pci_dev *pdev;
+	struct pci_bus *bus;
+	int ret = 0;
+
+	mutex_lock(&imx6_pcie->pm_lock);
+
+	bus = pci_find_bus(pp->root_bus_domain_nr, pp->root_bus_nr);
+
+	/* Remove all devices from the bus */
+	while ((pdev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, NULL)) != NULL) {
+		if (pdev->bus == bus) {
+			dev_info(&pdev->dev, "removing device %s from the bus\n", dev_name(&pdev->dev));
+			pci_stop_and_remove_bus_device(pdev);
+			pci_dev_put(pdev);
+		}
+	}
+
+	/* Turn off the PCIe port */
+	pci_imx_pm_turn_off(imx6_pcie);
+
+	/* Turn the regulator off and on */
+	if (imx6_pcie->pcie_dev_regulator) {
+		ret = regulator_disable(imx6_pcie->pcie_dev_regulator);
+		if (ret < 0)
+			dev_warn(&pdev->dev, "failed to disable pcie_dev_regulator\n");
+
+		/*
+		 * This value was determined using an Marvell 88W8897, after around
+		 * 20 ms the voltage did not drop further, thus, just to be sure, we
+		 * wait at least 30 ms.
+		 */
+		usleep_range(30000, 60000);
+
+		ret = regulator_enable(imx6_pcie->pcie_dev_regulator);
+		if (ret < 0)
+			dev_warn(&pdev->dev, "failed to enable pcie_dev_regulator\n");
+	}
+
+	/* At least 5 ms should be good enough */
+	usleep_range(5000, 8000);
+
+	/* Re-init the PCIe port */
+	ret = imx6_pcie_host_init(pp);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "imx6_pcie_host_init() failed with %d\n", ret);
+		goto exit;
+	}
+
+	/* And rescan the bus */
+	pci_rescan_bus(bus);
+
+exit:
+	mutex_unlock(&imx6_pcie->pm_lock);
+	return ret;
+}
+
+
+static ssize_t imx_pci_reset_store(struct device *dev, struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct imx6_pcie *imx6_pcie = dev_get_drvdata(dev);
+	int input;
+
+	sscanf(buf, "%d\n", &input);
+
+	if (input == 0)
+		return -EINVAL;
+
+	imx_pci_reset(imx6_pcie);
+
+	return count;
+}
+static DEVICE_ATTR(reset, S_IWUSR, NULL, imx_pci_reset_store);
 
 static struct attribute *imx6_pcie_pm_attrs[] = {
+#ifdef CONFIG_PM_SLEEP
 	&dev_attr_suspend.attr,
+#endif
+	&dev_attr_reset.attr,
 	NULL,
 };
 
@@ -1228,7 +1310,25 @@ static struct attribute_group imx6_pcie_pm_attrgroup = {
 	.attrs	= imx6_pcie_pm_attrs,
 };
 
-#endif
+/*
+ * This is not the cleanest way to do it, but we can be pretty sure
+ * that there is only a single PCIe bus on the imx6/7. Otherwise
+ * we would require a bit of pointer juggeling and referencing in the
+ * device tree to make this work nicely.
+ *
+ * NOTE: There is a framework for PCIe bus resets, but it does not
+ * seem to work without major modifications to the PCIe core. So
+ * we just export our own function.
+ */
+static struct imx6_pcie *imx6_pcie_reset = NULL;
+int imx_pci_reset_bus(void)
+{
+	if (imx6_pcie_reset == NULL)
+		return -EFAULT;
+
+	return imx_pci_reset(imx6_pcie_reset);
+}
+EXPORT_SYMBOL_GPL(imx_pci_reset_bus);
 
 static int __init imx6_pcie_probe(struct platform_device *pdev)
 {
@@ -1242,6 +1342,7 @@ static int __init imx6_pcie_probe(struct platform_device *pdev)
 	if (!imx6_pcie)
 		return -ENOMEM;
 
+	imx6_pcie_reset = imx6_pcie;
 	pp = &imx6_pcie->pp;
 	pp->dev = &pdev->dev;
 
@@ -1301,6 +1402,16 @@ static int __init imx6_pcie_probe(struct platform_device *pdev)
 		if (ret) {
 			dev_err(&pdev->dev, "unable to get reset gpio\n");
 			return ret;
+		}
+	}
+
+	imx6_pcie->pcie_dev_regulator = devm_regulator_get(pp->dev, "pcie-dev");
+	if (IS_ERR(imx6_pcie->pcie_dev_regulator)) {
+		dev_warn(&pdev->dev, "failed to get pcie-dev-supply\n");
+	} else {
+		ret = regulator_enable(imx6_pcie->pcie_dev_regulator);
+		if (ret) {
+			dev_err(&pdev->dev, "failed to enable pcie-dev-supply\n");
 		}
 	}
 
