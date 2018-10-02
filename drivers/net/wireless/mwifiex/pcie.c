@@ -2426,6 +2426,16 @@ done:
 	adapter->curr_mem_idx = 0;
 }
 
+int imx_pci_reset_bus(void);
+static void mwifiex_pcie_card_reset_work(struct mwifiex_adapter *adapter)
+{
+	struct pcie_service_card *card = adapter->card;
+	struct pci_dev *pdev = card->dev;
+
+	dev_info(&pdev->dev, "Resetting PCIe bus...\n");
+	imx_pci_reset_bus();
+}
+
 static unsigned long iface_work_flags;
 static struct mwifiex_adapter *save_adapter;
 static void mwifiex_pcie_work(struct work_struct *work)
@@ -2433,6 +2443,9 @@ static void mwifiex_pcie_work(struct work_struct *work)
 	if (test_and_clear_bit(MWIFIEX_IFACE_WORK_FW_DUMP,
 			       &iface_work_flags))
 		mwifiex_pcie_fw_dump_work(save_adapter);
+	if (test_and_clear_bit(MWIFIEX_IFACE_WORK_CARD_RESET,
+			       &iface_work_flags))
+		mwifiex_pcie_card_reset_work(save_adapter);
 }
 
 static DECLARE_WORK(pcie_work, mwifiex_pcie_work);
@@ -2452,6 +2465,17 @@ static void mwifiex_pcie_fw_dump(struct mwifiex_adapter *adapter)
 		return;
 
 	set_bit(MWIFIEX_IFACE_WORK_FW_DUMP, &iface_work_flags);
+
+	schedule_work(&pcie_work);
+}
+
+static void mwifiex_pcie_card_reset(struct mwifiex_adapter *adapter)
+{
+	save_adapter = adapter;
+	if (test_bit(MWIFIEX_IFACE_WORK_CARD_RESET, &iface_work_flags))
+		return;
+
+	set_bit(MWIFIEX_IFACE_WORK_CARD_RESET, &iface_work_flags);
 
 	schedule_work(&pcie_work);
 }
@@ -2700,6 +2724,7 @@ static struct mwifiex_if_ops pcie_ops = {
 	.init_fw_port =			mwifiex_pcie_init_fw_port,
 	.clean_pcie_ring =		mwifiex_clean_pcie_ring_buf,
 	.fw_dump =			mwifiex_pcie_fw_dump,
+	.card_reset =			mwifiex_pcie_card_reset,
 };
 
 /*
