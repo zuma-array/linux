@@ -187,6 +187,20 @@
 		/* when this pin is set the axp driver will perform a reset by toggeling the wakeup pin */
 		reset-wakeup-gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>;
 
+		/*
+		 * Set DCDC2 (VDD_SOC_IN) to PWM workmode. It turns out the the imx7 fails to boot in some
+		 * cases when VDD_SOC_IN is at 1.0V (the default value in the AXP OTP). We could just increase
+		 * the voltage before performing the reboot, but the reset procedure restores the VDD_SCO_IN
+		 * voltage from the OTP thus resetting it to 1.0V. As a workaround we set the DCDC2 to the PWM
+		 * workmode, this raises the voltage in low power consumtion conditions and prevails through
+		 * the reset procedure. It was verified by the hardware department and duration reboot tests
+		 * that this works stable.
+		 */
+		reset-workmode-config = <0x04>;
+
+		/* Per default all regulators are in auto mode */
+		default-workmode-config = <0x00>;
+
 		regulators {
 			vdd_arm: dcdc4 {
 				regulator-name = "vdd_arm";
