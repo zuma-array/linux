@@ -813,7 +813,7 @@ static struct snd_soc_dai_ops aml_dai_tdm_ops = {
 	.set_tdm_slot = aml_dai_set_tdm_slot,
 };
 
-#define AML_DAI_TDM_RATES		(SNDRV_PCM_RATE_8000_192000)
+#define AML_DAI_TDM_RATES		(SNDRV_PCM_RATE_8000_384000)
 #define AML_DAI_TDM_FORMATS		(SNDRV_PCM_FMTBIT_S16_LE |\
 		SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
 
