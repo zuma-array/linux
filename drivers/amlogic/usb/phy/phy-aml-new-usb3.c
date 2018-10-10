@@ -83,9 +83,16 @@ static void amlogic_new_set_vbus_power(struct amlogic_usb *phy, char is_power_on
 				 * When over-current detection (using DRVVBUS) is enabled, we configure
 				 * the pin as an input with a pull-up, when the DRVVBUS gets low an IRQ
 				 * will be triggered.
+				 *
+				 * Sometimes there is a high capacitive load on the line so the internal
+				 * pull-up will not be able to pull the line high with a decent slew rate.
+				 * This can lead to spurious interrupts, so before we congigure the pin
+				 * as a pulled-up GPIO input we drive it high for a brief amount of time
+				 * to load any stray capacitance on the line.
 				 */
-				gpiod_direction_input(phy->usb_gpio_desc);
+				gpiod_direction_output(phy->usb_gpio_desc, is_power_on);
 				gpiod_set_pull(phy->usb_gpio_desc, GPIOD_PULL_UP);
+				gpiod_direction_input(phy->usb_gpio_desc);
 			} else {
 				/* without over-current detection we just drive the pin */
 				gpiod_direction_output(phy->usb_gpio_desc, is_power_on);
