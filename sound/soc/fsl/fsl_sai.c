@@ -20,6 +20,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/math64.h>
 
 #include <sound/core.h>
 #include <sound/dmaengine_pcm.h>
@@ -759,20 +760,21 @@ static void fsl_sai_trigger_start_hwcounter(struct fsl_sai *sai, bool tx)
 		} else {
 			/* Calculate ktime */
 			ktime_t current_ktime, target_ktime;
-			u32 delta_ticks;
-			u32 ticks_to_ns = 1000000000UL / hwcounter_rate;
+			u64 delta_ticks;
+			u64 remaining_time;
 
 			current_ktime = ktime_get();
 			current_hwcounter = hwcounter_get_value(sai->hwcounter);
 
 			delta_ticks = sai->trigger_target - current_hwcounter;
+			remaining_time = div_u64(delta_ticks * 1000000000UL, hwcounter_rate);
 
 			/* TODO: subtract 80 us when we are doing the busy wait in the hrtimer callback */
-			target_ktime = ktime_add_ns(current_ktime, (delta_ticks * ticks_to_ns));
+			target_ktime = ktime_add_ns(current_ktime, remaining_time);
 
 			hrtimer_start(&sai->trigger_hrtimer, target_ktime, HRTIMER_MODE_ABS);
-			dev_info(&sai->pdev->dev, "Hrtimer started for trigger target %u, current %u, delta %u, factor %u\n",
-							sai->trigger_target, current_hwcounter, delta_ticks, ticks_to_ns);
+			dev_info(&sai->pdev->dev, "Hrtimer started for trigger target %u, current %u, delta %llu, rate %u\n",
+							sai->trigger_target, current_hwcounter, delta_ticks, hwcounter_rate);
 
 			dev_info(&sai->pdev->dev, "Setting hrtimer to target %lld, current ktime %lld\n", ktime_to_ns(target_ktime), ktime_to_ns(current_ktime));
 		}
