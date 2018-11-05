@@ -187,7 +187,7 @@ void aml_tdm_set_format(
 	unsigned int capture_active,
 	unsigned int playback_active)
 {
-	unsigned int binv, finv, id;
+	unsigned int binv_in, binv_out, finv, id;
 	unsigned int valb, valf;
 	unsigned int reg_in, reg_out, off_set;
 	int bclkin_skew, bclkout_skew;
@@ -196,7 +196,8 @@ void aml_tdm_set_format(
 
 	id = index;
 
-	binv = 0;
+	binv_in = 0;
+	binv_out = 0;
 	finv = 0;
 
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
@@ -238,10 +239,10 @@ void aml_tdm_set_format(
 		if (master_mode) {
 			clkctl |= MST_CLK_INVERT_PH0_PAD_BCLK;
 			if (capture_active)
-				binv |= 1;
+				binv_in |= 1;
 		} else {
 			if (playback_active)
-				binv |= 1;
+				binv_out |= 1;
 		}
 
 		break;
@@ -256,7 +257,7 @@ void aml_tdm_set_format(
 		bclkin_skew = 3;
 
 		if (capture_active)
-			binv |= 1;
+			binv_in |= 1;
 		break;
 	case SND_SOC_DAIFMT_LEFT_J:
 	case SND_SOC_DAIFMT_DSP_B:
@@ -268,7 +269,7 @@ void aml_tdm_set_format(
 		bclkin_skew = 2;
 
 		if (capture_active)
-			binv |= 1;
+			binv_in |= 1;
 		break;
 	default:
 		return;
@@ -281,8 +282,12 @@ void aml_tdm_set_format(
 	switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
 	case SND_SOC_DAIFMT_IB_IF:
 		/* Invert both clocks */
-		if (!master_mode)
-			binv ^= 1;
+		if (!master_mode) {
+			if (capture_active)
+				binv_in ^= 1;
+			if (playback_active)
+				binv_out ^= 1;
+		}
 
 		finv |= 1;
 		clkctl ^= MST_CLK_INVERT_PH0_PAD_BCLK;
@@ -290,8 +295,12 @@ void aml_tdm_set_format(
 		break;
 	case SND_SOC_DAIFMT_IB_NF:
 		/* Invert bit clock */
-		if (!master_mode)
-			binv ^= 1;
+		if (!master_mode) {
+			if (capture_active)
+				binv_in ^= 1;
+			if (playback_active)
+				binv_out ^= 1;
+		}
 		clkctl ^= MST_CLK_INVERT_PH0_PAD_BCLK;
 		break;
 	case SND_SOC_DAIFMT_NB_IF:
@@ -315,8 +324,8 @@ void aml_tdm_set_format(
 		aml_audiobus_update_bits(actrl, reg_out, 0x3f, clkctl);
 	}
 
-	pr_info("master_mode(%d), binv(%d), finv(%d) out_skew(%d), in_skew(%d)\n",
-			master_mode, binv, finv, bclkout_skew, bclkin_skew);
+	pr_info("master_mode(%d), binv_in(%d), binv_out(%d), finv(%d) out_skew(%d), in_skew(%d)\n",
+			master_mode, binv_in, binv_out, finv, bclkout_skew, bclkin_skew);
 
 	/* TDM out */
 	if (playback_active) {
@@ -326,7 +335,7 @@ void aml_tdm_set_format(
 			0x3<<30, 0x3<<30);
 
 		aml_audiobus_update_bits(actrl, reg_out,
-			0x1<<29, binv<<29);
+			0x1<<29, binv_out<<29);
 
 		off_set = EE_AUDIO_TDMOUT_B_CTRL1 - EE_AUDIO_TDMOUT_A_CTRL1;
 		reg_out = EE_AUDIO_TDMOUT_A_CTRL1 + off_set * id;
@@ -346,7 +355,7 @@ void aml_tdm_set_format(
 
 		if (master_mode)
 			aml_audiobus_update_bits(actrl, reg_in,
-				0x1<<29, binv<<29);
+				0x1<<29, binv_in<<29);
 
 		off_set = EE_AUDIO_TDMIN_B_CTRL - EE_AUDIO_TDMIN_A_CTRL;
 		reg_in = EE_AUDIO_TDMIN_A_CTRL + off_set * id;
