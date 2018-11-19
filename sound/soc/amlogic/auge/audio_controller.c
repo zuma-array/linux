@@ -112,7 +112,7 @@ static int aml_audio_controller_probe(struct platform_device *pdev)
 {
 	struct aml_audio_controller *actrl;
 
-	pr_info("asoc debug: %s-%d\n", __func__, __LINE__);
+	pr_info("called %s\n", __func__);
 	actrl = devm_kzalloc(&pdev->dev, sizeof(*actrl), GFP_KERNEL);
 	if (!actrl)
 		return -ENOMEM;
