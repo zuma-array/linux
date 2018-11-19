@@ -310,9 +310,6 @@ static int amlogic_new_usb3_probe(struct platform_device *pdev)
 	if (prop)
 		otg = of_read_ulong(prop, 1);
 
-	if (!portnum)
-		dev_err(&pdev->dev, "This phy has no usb port\n");
-
 	if(of_property_read_bool(dev->of_node, "sue,oc-detect")) {
 		dev_info(&pdev->dev, "over-current detection usind DRVVBUS is enabled\n");
 		oc_detect = true;
