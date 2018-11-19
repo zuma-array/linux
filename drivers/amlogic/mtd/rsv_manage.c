@@ -39,16 +39,16 @@ static struct free_node_t *get_free_node(struct mtd_info *mtd)
 	struct aml_nand_chip *aml_chip = mtd_to_nand_chip(mtd);
 	unsigned int index;
 
-	pr_info("%s %d: bitmap=%llx\n", __func__, __LINE__,
+	pr_debug("%s %d: bitmap=%llx\n", __func__, __LINE__,
 		aml_chip->freeNodeBitmask);
 
 	index = find_first_zero_bit((void *)&aml_chip->freeNodeBitmask, 64);
 	if (index > RESERVED_BLOCK_NUM)
-		pr_info("%s %d: index=%d is greater than max! error",
+		pr_debug("%s %d: index=%d is greater than max! error",
 			__func__, __LINE__, index);
 	test_and_set_bit(index, (void *)&aml_chip->freeNodeBitmask);
 
-	pr_info("%s %d: bitmap=%llx\n", __func__, __LINE__,
+	pr_debug("%s %d: bitmap=%llx\n", __func__, __LINE__,
 		aml_chip->freeNodeBitmask);
 
 	return aml_chip->free_node[index];
@@ -1087,7 +1087,7 @@ RE_RSV_INFO:
 	pr_info("%s free list:\n", nandrsv_info->name);
 	tmp_node = nandrsv_info->free_node;
 	while (tmp_node != NULL) {
-		pr_info("blockN=%d, ec=%d, dirty_flag=%d\n",
+		pr_debug("blockN=%d, ec=%d, dirty_flag=%d\n",
 			tmp_node->phy_blk_addr,
 			tmp_node->ec,
 			tmp_node->dirty_flag);
