@@ -906,7 +906,7 @@ static int aml_pdm_platform_probe(struct platform_device *pdev)
 	/* init reserved memory */
 	ret = of_reserved_mem_device_init(&pdev->dev);
 	if (ret != 0) {
-		pr_err("%s failed get reserved mem\n", __func__);
+		pr_info("%s failed to get reserved mem\n", __func__);
 	} else {
 		cma = dev_get_cma_area(&pdev->dev);
 		if (cma) {
