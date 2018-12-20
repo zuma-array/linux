@@ -755,11 +755,13 @@ static void fsl_sai_trigger_start_hwcounter(struct fsl_sai *sai, bool tx)
 		/* (hwcounter_rate / 10000) is always ~100 us */
 		if (d < (s32)(hwcounter_rate / 10000)) {
 			sai->trigger_state = FSL_SAI_TRIGGER_STATE_FAILED;
+
+			/* we must call fsl_sai_trigger_start() even if we failed, to unblock the audio */
 			fsl_sai_trigger_start(sai, tx);
 			dev_info(&sai->pdev->dev, "Trigger failed because the target %u was too close or behind the counter %u\n", sai->trigger_target, current_hwcounter);
 		} else {
 			/* Calculate ktime */
-			ktime_t current_ktime, target_ktime;
+			ktime_t current_ktime;
 			u64 delta_ticks;
 			u64 remaining_time;
 
@@ -770,16 +772,18 @@ static void fsl_sai_trigger_start_hwcounter(struct fsl_sai *sai, bool tx)
 			remaining_time = div_u64(delta_ticks * 1000000000UL, hwcounter_rate);
 
 			/* TODO: subtract 80 us when we are doing the busy wait in the hrtimer callback */
-			target_ktime = ktime_add_ns(current_ktime, remaining_time);
+			sai->trigger_time = ktime_add_ns(current_ktime, remaining_time);
 
-			hrtimer_start(&sai->trigger_hrtimer, target_ktime, HRTIMER_MODE_ABS);
-			dev_info(&sai->pdev->dev, "Hrtimer started for trigger target %u, current %u, delta %llu, rate %u\n",
-							sai->trigger_target, current_hwcounter, delta_ticks, hwcounter_rate);
+			hrtimer_start(&sai->trigger_hrtimer, sai->trigger_time, HRTIMER_MODE_ABS);
 
-			dev_info(&sai->pdev->dev, "Setting hrtimer to target %lld, current ktime %lld\n", ktime_to_ns(target_ktime), ktime_to_ns(current_ktime));
+			dev_info(&sai->pdev->dev, "Hrtimer started for trigger target %u, current %u, delta %llu (%llu ms), rate %u\n",
+							sai->trigger_target, current_hwcounter, delta_ticks, div_u64(delta_ticks * 1000UL, hwcounter_rate), hwcounter_rate);
+
+			dev_info(&sai->pdev->dev, "Setting hrtimer to target %lld, current ktime %lld\n", ktime_to_ns(sai->trigger_time), ktime_to_ns(current_ktime));
 		}
 	} else {
 		fsl_sai_trigger_start(sai, tx);
+		dev_info(&sai->pdev->dev, "no trigger scheduled, immediate start of playback\n");
 	}
 }
 
@@ -788,8 +792,27 @@ enum hrtimer_restart audio_trigger_start(struct hrtimer *timer)
 	struct fsl_sai *sai = container_of(timer, struct fsl_sai, trigger_hrtimer);
 
 	/* TODO: add busy wait */
-	fsl_sai_trigger_start(sai, true);
-	sai->trigger_state = FSL_SAI_TRIGGER_STATE_SUCCESS;
+
+	/* what is the current time? */
+	ktime_t current_ktime = ktime_get();
+
+	/* what is the difference between current time and scheduled time? */
+	ktime_t time_diff = ktime_sub(current_ktime, sai->trigger_time);
+
+	/* how much is it in nanoseconds? */
+	u64 time_diff_ns = ktime_to_ns(time_diff);
+
+	/* now check how much we missed. Threshold is specified by sai->max_trigger_latency property (in microseconds) */
+	if (time_diff_ns > sai->max_trigger_latency) {
+		sai->trigger_state = FSL_SAI_TRIGGER_STATE_FAILED;
+		/* we must call fsl_sai_trigger_start() even if we failed, to unblock the audio */
+		fsl_sai_trigger_start(sai, true);
+		dev_info(&sai->pdev->dev, "triggered too late! current ktime %lld, scheduled ktime %lld, trigger latency = %llu us\n", ktime_to_ns(current_ktime), ktime_to_ns(sai->trigger_time), div_u64(time_diff_ns, 1000));
+	} else {
+		sai->trigger_state = FSL_SAI_TRIGGER_STATE_SUCCESS;
+		fsl_sai_trigger_start(sai, true);
+		dev_info(&sai->pdev->dev, "audio start triggered, trigger latency = %llu us\n", div_u64(time_diff_ns, 1000));
+	}
 
 	return HRTIMER_NORESTART;
 }
@@ -888,6 +911,13 @@ static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+		/* make sure scheduled trigger is cancelled when the audio is paused or shut down */
+		if (sai->trigger_state == FSL_SAI_TRIGGER_STATE_ARMED) {
+			dev_info(&sai->pdev->dev, "Canceling scheduled trigger\n");
+			hrtimer_try_to_cancel(&sai->trigger_hrtimer);
+			sai->trigger_state = FSL_SAI_TRIGGER_STATE_IDLE;
+		}
+
 		regmap_update_bits(sai->regmap, FSL_SAI_xCSR(tx),
 				   FSL_SAI_CSR_FRDE, 0);
 		regmap_update_bits(sai->regmap, FSL_SAI_xCSR(tx),
@@ -1308,6 +1338,10 @@ static int fsl_sai_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "could not get hwcounter data for hwcounter-node, trigger will not be available\n");
 		goto trigger_init_end;
 	}
+
+	/* read maximum allowed trigger latency. Default value is 250 microseconds */
+	if (of_property_read_u32(np, "max-trigger-latency", &sai->max_trigger_latency))
+		sai->max_trigger_latency = 250000;
 
 	sai->trigger_state = FSL_SAI_TRIGGER_STATE_IDLE;
 	hrtimer_init(&sai->trigger_hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);

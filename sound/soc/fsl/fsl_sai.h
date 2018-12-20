@@ -170,8 +170,10 @@ struct fsl_sai {
 #ifdef CONFIG_SUE_HWCOUNTER_MX7
 	struct hwcounter_data *hwcounter;
 	struct hrtimer trigger_hrtimer;
+	ktime_t trigger_time;
 	u32 trigger_target;
 	u32 trigger_state;
+	u32 max_trigger_latency;
 #endif
 };
 
