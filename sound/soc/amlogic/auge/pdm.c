@@ -71,8 +71,8 @@ static struct snd_pcm_hardware aml_pdm_hardware = {
 	.channels_min		=	PDM_CHANNELS_MIN,
 	.channels_max		=	PDM_CHANNELS_MAX,
 
-	.buffer_bytes_max	=	32 * 1024,
-	.period_bytes_max	=	16 * 1024,
+	.buffer_bytes_max	=	128 * 1024,
+	.period_bytes_max	=	64 * 1024,
 	.period_bytes_min	=	32,
 	.periods_min		=	2,
 	.periods_max		=	1024,
