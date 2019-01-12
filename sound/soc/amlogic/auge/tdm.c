@@ -309,6 +309,13 @@ static int aml_dai_tdm_startup(struct snd_pcm_substream *substream,
 		goto err;
 	}
 
+	/*
+	 * Make sure, that the buffer size is always even (aligned to 2 bytes)
+	 * to avoid problems with audio pointer calculation!
+	 */
+	snd_pcm_hw_constraint_step(substream->runtime, 0,
+		SNDRV_PCM_HW_PARAM_BUFFER_SIZE, 2);
+
 	return ret;
 err:
 	pr_err("failed enable clock\n");
