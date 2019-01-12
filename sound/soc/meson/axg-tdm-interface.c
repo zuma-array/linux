@@ -173,6 +173,13 @@ static int axg_tdm_iface_startup(struct snd_pcm_substream *substream,
 		ret = snd_pcm_hw_constraint_single(substream->runtime,
 						   SNDRV_PCM_HW_PARAM_RATE,
 						   iface->rate);
+		/*
+		* Make sure, that the buffer size is always even (aligned to 2 bytes)
+		* to avoid problems with audio pointer calculation!
+		*/
+		ret |= snd_pcm_hw_constraint_step(substream->runtime, 0,
+			SNDRV_PCM_HW_PARAM_BUFFER_SIZE, 2);
+
 		if (ret < 0) {
 			dev_err(dai->dev,
 				"can't set iface rate constraint\n");
