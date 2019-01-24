@@ -935,7 +935,7 @@ static const char * const tdmc_in_groups[] = {
 };
 
 static const char * const tdmc_out_groups[] = {
-	"tdmc_sclk", "tdmc_fs", "tdmc_dout0", "tdmb_dout1",
+	"tdmc_sclk", "tdmc_fs", "tdmc_dout0", "tdmc_dout1",
 	"tdmc_dout2_a6", "tdmc_dout3_a7",
 	"tdmc_dout2_a15", "tdmc_dout3_a16",
 	"tdmc_slv_sclk", "tdmc_slv_fs",
