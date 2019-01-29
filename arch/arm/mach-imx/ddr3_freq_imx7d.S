@@ -168,19 +168,19 @@
 	ldr	r7, =0x202ffd0
 	str	r7, [r5, #DDRPHY_MDLL_CON0]
 
-	ldr	r7, =0x1000007f
+	ldr	r7, =0x100000bf
 	str	r7, [r5, #DDRPHY_OFFSETD_CON0]
 
-	ldr	r7, =0x7f7f7f7f
+	ldr	r7, =0xbfbfbfbf
 	str	r7, [r5, #DDRPHY_OFFSETR_CON0]
 	str	r7, [r5, #DDRPHY_OFFSETR_CON1]
-	ldr	r7, =0x7f
+	ldr	r7, =0xbf
 	str	r7, [r5, #DDRPHY_OFFSETR_CON2]
 
-	ldr	r7, =0x7f7f7f7f
+	ldr	r7, =0xbfbfbfbf
 	str	r7, [r5, #DDRPHY_OFFSETW_CON0]
 	str	r7, [r5, #DDRPHY_OFFSETW_CON1]
-	ldr	r7, =0x7f
+	ldr	r7, =0xbf
 	str	r7, [r5, #DDRPHY_OFFSETW_CON2]
 
 	ldr	r7, [r9, #ANADIG_DIGPROG]
@@ -202,9 +202,9 @@
 	str	r7, [r5, #DDRPHY_CA_DSKEW_CON1]
 	str	r7, [r5, #DDRPHY_CA_DSKEW_CON2]
 21:
-	ldr	r7, =0x1100007f
+	ldr	r7, =0x110000bf
 	str	r7, [r5, #DDRPHY_OFFSETD_CON0]
-	ldr	r7, =0x1000007f
+	ldr	r7, =0x100000bf
 	str	r7, [r5, #DDRPHY_OFFSETD_CON0]
 
 	ldr	r7, =0x0
