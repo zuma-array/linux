@@ -25,6 +25,7 @@
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
 #include <sound/soc.h>
+#include <sound/tlv.h>
 #include <sound/pcm_params.h>
 
 #define ES9018_PCM_FORMATS (SNDRV_PCM_FMTBIT_S16_LE |	\
@@ -148,9 +149,11 @@ static SOC_ENUM_DOUBLE_DECL(es9018_analog_polarity,
 			    ES9018_CHANNELMAP, 2, 3,
 			    es9018_analog_polarity_txt);
 
+static const DECLARE_TLV_DB_SCALE(vol_DAC_tlv, -12000, 50, 0);
+
 static const struct snd_kcontrol_new es9018_controls[] = {
-	SOC_DOUBLE_R("Master Playback Volume", ES9018_VOL1_LEFT,
-		     ES9018_VOL2_RIGHT, 0, 0xff, 1),
+	SOC_DOUBLE_R_TLV("Master Playback Volume", ES9018_VOL1_LEFT,
+			ES9018_VOL2_RIGHT, 0, 240 , 1, vol_DAC_tlv),
 	SOC_DOUBLE("Master Playback Switch", ES9018_GENERAL, 0, 1, 1, 1),
 	SOC_ENUM("PCM Rolloff filter", es9018_pcm_rolloff_filter),
 	SOC_ENUM("DSD Rolloff filter", es9018_dsd_rolloff_filter),
