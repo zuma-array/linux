@@ -1,0 +1,195 @@
+
+#include "imx8mm-pad.h"
+#include "../freescale/fsl-imx8mm.dtsi"
+
+/ {
+	model = "StreamUnlimited Stream195x module (i.MX8MM)";
+	compatible = "sue,stream195x", "fsl,imx8mm";
+
+	bt_reset: modem-reset {
+		compatible = "gpio-reset";
+		reset-gpios = <&gpio2 10 GPIO_ACTIVE_LOW>;
+		reset-delay-us = <2000>;
+		reset-post-delay-ms = <40>;
+		#reset-cells = <0>;
+	};
+};
+
+&A53_0 {
+	arm-supply = <&vdd_arm>;
+};
+
+&busfreq {
+	/*
+	 * Disable the busfreq for now since it seems to be broken for some
+	 * reason or another (probably not compatible out of the box with
+	 * the Stream195x memory configuration).
+	 */
+	status = "disabled";
+};
+
+&crypto {
+	status = "disabled";
+};
+
+&caam_sm {
+	status = "disabled";
+};
+
+&i2c1 {
+	clock-frequency = <400000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c1>;
+	status = "okay";
+
+	pmic: axp15060@36 {
+		compatible = "x-powers,axp15060";
+		reg = <0x36>;
+
+		regulators {
+			vdd_arm: dcdc2 {
+				regulator-name = "vdd_arm";
+				regulator-min-microvolt = <800000>;
+				regulator-max-microvolt = <1000000>;
+				regulator-boot-on;
+				regulator-always-on;
+			};
+
+			wifi_conv_3v3: aldo4 {
+				regulator-name = "wifi_conv_3v3";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+			};
+		};
+	};
+};
+
+&iomuxc {
+	imx8mm-s195x-internal {
+		pinctrl_gpmi_nand_1: gpmi-nand-1 {
+			fsl,pins = <
+				MX8MM_IOMUXC_NAND_ALE_RAWNAND_ALE		(PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_CE0_B_RAWNAND_CE0_B		(PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_CLE_RAWNAND_CLE		(PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_DATA00_RAWNAND_DATA00		(PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_DATA01_RAWNAND_DATA01		(PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_DATA02_RAWNAND_DATA02		(PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_DATA03_RAWNAND_DATA03		(PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_DATA04_RAWNAND_DATA04		(PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_DATA05_RAWNAND_DATA05		(PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_DATA06_RAWNAND_DATA06		(PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_DATA07_RAWNAND_DATA07		(PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_DQS_RAWNAND_DQS		(PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_RE_B_RAWNAND_RE_B		(PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_READY_B_RAWNAND_READY_B	(PAD_CTL_PE_UP | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_WE_B_RAWNAND_WE_B		(PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_NAND_WP_B_RAWNAND_WP_B		(PAD_CTL_HYS)
+			>;
+		};
+
+		pinctrl_i2c1: i2c1grp {
+			fsl,pins = <
+				MX8MM_IOMUXC_I2C1_SCL_I2C1_SCL			(IOMUX_CONFIG_SION | PAD_CTL_PE_UP | PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_I2C1_SDA_I2C1_SDA			(IOMUX_CONFIG_SION | PAD_CTL_PE_UP | PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+			>;
+		};
+
+		pinctrl_uart2: uart2grp {
+			fsl,pins = <
+				MX8MM_IOMUXC_UART2_RXD_UART2_DCE_RX	(PAD_CTL_PE_UP | PAD_CTL_HYS | PAD_CTL_FAST)
+				MX8MM_IOMUXC_UART2_TXD_UART2_DCE_TX	(PAD_CTL_PE_UP | PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_UART4_RXD_UART2_DCE_CTS_B	(PAD_CTL_PE_UP | PAD_CTL_HYS | PAD_CTL_FAST)
+				MX8MM_IOMUXC_UART4_TXD_UART2_DCE_RTS_B	(PAD_CTL_PE_DOWN | PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_SD1_RESET_B_GPIO2_IO10	(PAD_CTL_PE_UP | PAD_CTL_HYS)	/* WLAN_BT_REG_ON */
+				MX8MM_IOMUXC_SD1_STROBE_GPIO2_IO11	(PAD_CTL_PE_UP | PAD_CTL_HYS)	/* BT_HOST_WAKE */
+			>;
+		};
+
+		pinctrl_usdhc1: usdhc1grp {
+			fsl,pins = <
+				MX8MM_IOMUXC_SD1_CLK_USDHC1_CLK		(PAD_CTL_PE_DOWN | PAD_CTL_SLOW | PAD_CTL_DSE1x)
+				MX8MM_IOMUXC_SD1_CMD_USDHC1_CMD		(PAD_CTL_PE_UP | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_SD1_DATA0_USDHC1_DATA0	(PAD_CTL_PE_UP | PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_SD1_DATA1_USDHC1_DATA1	(PAD_CTL_PE_UP | PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_SD1_DATA2_USDHC1_DATA2	(PAD_CTL_PE_UP | PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+				MX8MM_IOMUXC_SD1_DATA3_USDHC1_DATA3	(PAD_CTL_PE_UP | PAD_CTL_HYS | PAD_CTL_FAST | PAD_CTL_DSE6x)
+			>;
+		};
+
+		pinctrl_wdog: wdoggrp {
+			fsl,pins = <
+				MX8MM_IOMUXC_GPIO1_IO02_WDOG1_WDOG_B	(PAD_CTL_PE_UP | PAD_CTL_HYS | PAD_CTL_DSE6x)
+			>;
+		};
+
+		pinctrl_wifi: wifigrp {
+			fsl,pins = <
+				MX8MM_IOMUXC_SD1_DATA5_GPIO2_IO7	(PAD_CTL_PE_UP | PAD_CTL_HYS)	/* WIFI_IRQ (OOB) */
+				MX8MM_IOMUXC_SD1_DATA6_GPIO2_IO8	(PAD_CTL_PE_UP | PAD_CTL_HYS)	/* WLAN_WL_REG_ON */
+				MX8MM_IOMUXC_SD1_DATA7_GPIO2_IO9	(PAD_CTL_PE_UP | PAD_CTL_HYS)	/* WLAN_HOST_WAKE */
+			>;
+		};
+	};
+};
+
+&gpmi {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_gpmi_nand_1>;
+	nand-on-flash-bbt;
+	status = "okay";
+
+	/*
+	 * These timings were taken from the Stream810 where we are
+	 * using the same NAND chip.
+	 */
+	timings {
+		data-setup-ns = <12>;
+		data-hold-ns = <11>;
+		address-setup-ns = <20>;
+		trea-ns = <20>;
+		trloh-ns = <5>;
+		trhoh-ns = <25>;
+	};
+};
+
+&uart2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart2>;
+	uart-has-rtscts;
+	assigned-clocks = <&clk IMX8MM_CLK_UART2_SRC>;
+	assigned-clock-parents = <&clk IMX8MM_SYS_PLL1_80M>;
+	/* TODO: Make sure the reset gets toggled on boot */
+	resets = <&bt_reset>;
+	status = "okay";
+};
+
+&usdhc1 {
+	/* TODO: check if we maybe need different pinctrl settings for the different speeds */
+	pinctrl-names = "default", "state_100mhz", "state_200mhz";
+	pinctrl-0 = <&pinctrl_usdhc1>, <&pinctrl_wifi>;
+	pinctrl-1 = <&pinctrl_usdhc1>, <&pinctrl_wifi>;
+	pinctrl-2 = <&pinctrl_usdhc1>, <&pinctrl_wifi>;
+	bus-width = <4>;
+	pm-ignore-notify;
+	keep-power-in-suspend;
+	non-removable;
+
+	/*
+	 * This configures the SDIO clocks to run at 187.5 MHz instead of the
+	 * default 200 MHz. Main reason is the reduction of EMI by the SDIO
+	 * clock.
+	 */
+	assigned-clocks = <&clk IMX8MM_CLK_USDHC1_DIV>, <&clk IMX8MM_CLK_USDHC1_SRC>;
+	assigned-clock-parents = <0>, <&clk IMX8MM_SYS_PLL3_OUT>;
+	assigned-clock-rates = <375000000>, <0>;
+
+	status = "okay";
+};
+
+&wdog1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_wdog>;
+	fsl,ext-reset-output;
+	status = "okay";
+};
