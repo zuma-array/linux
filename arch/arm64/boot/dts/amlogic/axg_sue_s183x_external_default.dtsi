@@ -141,6 +141,7 @@
 	status = "okay";
 	pinctrl-names="default";
 	pinctrl-0=<&b_i2c_master>;
+	clock-frequency = <400000>;
 };
 
 &spicc_a {
