@@ -13,4 +13,6 @@ obj-$(CONFIG_AMLOGIC_SND_SOC_AUGE)	+= audio_controller.o \
 						iomap.o \
 						ddr_mngr.o \
 						loopback_hw.o \
-						audio_utils.o
+						audio_utils.o \
+						resample.o \
+						resample_hw.o \

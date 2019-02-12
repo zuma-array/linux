@@ -23,6 +23,7 @@
 #include "pdm_hw.h"
 #include "tdm_hw.h"
 #include "ddr_mngr.h"
+#include "resample.h"
 
 #include <linux/of_platform.h>
 
@@ -399,30 +400,6 @@ static const struct soc_enum lane3_mixer_enum =
 	SOC_ENUM_SINGLE_EXT(
 		ARRAY_SIZE(lane3_mixer_text),
 		lane3_mixer_text);
-
-static const char * const spdifin_sample_rate_text[] = {
-	"24000",
-	"32000",
-	"44100",
-	"46000",
-	"48000",
-	"96000",
-	"192000",
-};
-
-static const struct soc_enum spdifin_sample_rate_enum =
-	SOC_ENUM_SINGLE_EXT(
-		ARRAY_SIZE(spdifin_sample_rate_text),
-		spdifin_sample_rate_text);
-
-static int spdifin_sample_rate_get(struct snd_kcontrol *kcontrol,
-		struct snd_ctl_elem_value *ucontrol)
-{
-	int mode = spdifin_get_mode();
-
-	ucontrol->value.enumerated.item[0] = mode;
-	return 0;
-}
 
 static const char * const spdif_channel_status_text[] = {
 	"Channel A Status[31:0]",
@@ -860,11 +837,6 @@ static const struct snd_kcontrol_new snd_auge_controls[] = {
 	SND_MIX("TDMOUT_C Lane3 Mixer Channel",
 		TDMOUT_C, lane3_mixer_enum, 23, 0x1),
 
-	/* SPDIFIN sample rate */
-	SOC_ENUM_EXT("SPDIFIN Sample Rate",
-			 spdifin_sample_rate_enum,
-			 spdifin_sample_rate_get,
-			 NULL),
 	/* SPDIFIN Channel Status */
 	SPDIFIN_CHSTATUS("SPDIFIN Channel Status",
 				spdif_channel_status_enum),
@@ -885,7 +857,16 @@ static const struct snd_kcontrol_new snd_auge_controls[] = {
 
 int snd_card_add_kcontrols(struct snd_soc_card *card)
 {
+	int ret;
+
 	pr_info("%s card:%p\n", __func__, card);
+
+	ret = card_add_resample_kcontrols(card);
+	if (ret < 0) {
+		pr_err("Failed to add resample controls\n");
+		return ret;
+	}
+
 	return snd_soc_add_card_controls(card,
 		snd_auge_controls, ARRAY_SIZE(snd_auge_controls));
 

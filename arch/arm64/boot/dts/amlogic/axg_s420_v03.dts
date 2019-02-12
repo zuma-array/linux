@@ -975,7 +975,7 @@
 		#sound-dai-cells = <0>;
 		clocks = <&clkaudio CLKID_AUDIO_PDM
 			&clkc CLKID_FCLK_DIV3
-			&clkc CLKID_MPLL3
+			&clkc CLKID_MPLL2
 			&clkaudio CLKID_AUDIO_PDMIN0
 			&clkaudio CLKID_AUDIO_PDMIN1>;
 		clock-names = "gate",
@@ -1038,6 +1038,25 @@
 		/*datalb-lane-mask-in = <0 1>;*/
 		datalb_chmask = <0x1>;
 
+		status = "okay";
+	};
+	audioresample: resample {
+		compatible = "amlogic, axg-resample";
+		clocks = <&clkc CLKID_MPLL0
+				&clkaudio CLKID_AUDIO_MCLK_F
+				&clkaudio CLKID_AUDIO_RESAMPLE_CTRL>;
+		clock-names = "resample_pll", "resample_src", "resample_clk";
+		/*same with toddr_src
+		 *	TDMIN_A,
+		 *	TDMIN_B,
+		 *	TDMIN_C,
+		 *	SPDIFIN,
+		 *	PDMIN,
+		 *	NONE,
+		 *	TDMIN_LB,
+		 *	LOOPBACK,
+		 */
+		resample_module = <3>;
 		status = "okay";
 	};
 }; /* end of audiobus */

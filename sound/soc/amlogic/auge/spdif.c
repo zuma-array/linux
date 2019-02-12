@@ -24,6 +24,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/clk.h>
+#include <linux/extcon.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/initval.h>
@@ -35,8 +36,11 @@
 #include "ddr_mngr.h"
 #include "spdif_hw.h"
 #include "audio_utils.h"
+#include "resample.h"
 
 #define DRV_NAME "aml_spdif"
+//#define __SPDIFIN_AUDIO_TYPE_HW_DETECT__
+//#define __SPDIFIN_AUDIO_TYPE_SW_DETECT__
 
 struct aml_spdif {
 	struct pinctrl *pin_ctl;
@@ -53,6 +57,13 @@ struct aml_spdif {
 	int irq_spdifin;
 	struct toddr *tddr;
 	struct frddr *fddr;
+	/* external connect */
+	struct extcon_dev *edev;
+#ifdef __SPDIFIN_AUDIO_TYPE_SW_DETECT__
+	/* update spdifin channel status for pcm or nonpcm */
+	struct timer_list timer;
+	struct work_struct work;
+#endif
 };
 
 static const struct snd_pcm_hardware aml_spdif_hardware = {
@@ -72,10 +83,278 @@ static const struct snd_pcm_hardware aml_spdif_hardware = {
 	.buffer_bytes_max = 256 * 1024,
 
 	.rate_min = 8000,
-	.rate_max = 48000,
+	.rate_max = 192000,
 	.channels_min = 2,
 	.channels_max = 32,
 };
+
+static const unsigned int spdifin_extcon[] = {
+	EXTCON_SPDIFIN_SAMPLERATE,
+	EXTCON_SPDIFIN_AUDIOTYPE,
+	EXTCON_NONE,
+};
+
+/* current sample mode and its sample rate */
+/*int sample_mode[] = {
+	24000,
+	32000,
+	44100,
+	46000,
+	48000,
+	96000,
+	192000,
+};*/
+
+static const char *const spdifin_samplerate[] = {
+#if 1
+	"N/A",
+	"32000",
+	"44100",
+	"48000",
+	"88200",
+	"96000",
+	"176400",
+	"192000"
+#else
+	"N/A",
+	"24000",
+	"32000",
+	"44100",
+	"46000",
+	"48000",
+	"96000",
+	"192000"
+#endif
+};
+
+static int spdifin_samplerate_get_enum(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	int val = spdifin_get_sample_rate();
+
+	if (val == 0x7)
+		val = 0;
+	else
+		val += 1;
+
+	ucontrol->value.integer.value[0] = val;
+
+	return 0;
+}
+
+static const struct soc_enum spdifin_sample_rate_enum[] = {
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(spdifin_samplerate),
+			spdifin_samplerate),
+};
+
+/* spdif in audio format detect: LPCM or NONE-LPCM */
+struct sppdif_audio_info {
+	unsigned char aud_type;
+	/*IEC61937 package presamble Pc value*/
+	short pc;
+	char *aud_type_str;
+};
+
+static const char *const spdif_audio_type_texts[] = {
+	"LPCM",
+	"AC3",
+	"EAC3",
+	"DTS",
+	"DTS-HD",
+	"TRUEHD",
+	"PAUSE"
+};
+
+static const struct sppdif_audio_info type_texts[] = {
+	{0, 0, "LPCM"},
+	{1, 0x1, "AC3"},
+	{2, 0x15, "EAC3"},
+	{3, 0xb, "DTS-I"},
+	{3, 0x0c, "DTS-II"},
+	{3, 0x0d, "DTS-III"},
+	{3, 0x11, "DTS-IV"},
+	{4, 0, "DTS-HD"},
+	{5, 0x16, "TRUEHD"},
+	{6, 0x103, "PAUSE"},
+	{6, 0x003, "PAUSE"},
+	{6, 0x100, "PAUSE"},
+};
+static const struct soc_enum spdif_audio_type_enum =
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(spdif_audio_type_texts),
+			spdif_audio_type_texts);
+
+static int spdifin_check_audio_type(void)
+{
+	int total_num = sizeof(type_texts)/sizeof(struct sppdif_audio_info);
+	int pc = spdifin_get_audio_type();
+	int audio_type = 0;
+	int i;
+
+	for (i = 0; i < total_num; i++) {
+		if (pc == type_texts[i].pc) {
+			audio_type = type_texts[i].aud_type;
+			break;
+		}
+	}
+
+	pr_info("%s audio type:%d\n", __func__, audio_type);
+
+	return audio_type;
+}
+
+#if 0
+static int spdifin_check_audio_type_is_pcm(void)
+{
+	return spdifin_check_audio_type() == 0;
+}
+#endif
+
+static int spdifin_audio_type_get_enum(
+	struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.enumerated.item[0] =
+		spdifin_check_audio_type();
+
+	return 0;
+}
+
+static const struct snd_kcontrol_new snd_spdif_controls[] = {
+
+	SOC_ENUM_EXT("SPDIFIN Sample Rate", spdifin_sample_rate_enum,
+				spdifin_samplerate_get_enum,
+				NULL),
+
+	SOC_ENUM_EXT("SPDIFIN Audio Type",
+			 spdif_audio_type_enum,
+			 spdifin_audio_type_get_enum,
+			 NULL),
+};
+
+int last_sample_mode;
+
+static void spdifin_status_event(struct aml_spdif *p_spdif)
+{
+	int intrpt_status;
+
+	if (p_spdif == NULL)
+		return;
+
+	/*
+	 * interrupt status, check and clear by reg_clk_interrupt;
+	 */
+	intrpt_status = aml_spdifin_status_check(p_spdif->actrl);
+
+	if (intrpt_status & 0x1)
+		pr_info("over flow!!\n");
+	if (intrpt_status & 0x2)
+		pr_info("parity error\n");
+
+	if (intrpt_status & 0x4) {
+		int mode = (intrpt_status >> 28) & 0x7;
+
+		if (last_sample_mode == mode)
+			return;
+
+		last_sample_mode = mode;
+
+		//pr_info("sample mode changed, intrpt_status:0x%x, mode:0x%x\n",
+		//	intrpt_status, mode);
+
+		if ((mode == 0x7) || (((intrpt_status >> 18) & 0x3ff) == 0x3ff)) {
+			pr_info("Default value, not detect sample rate\n");
+			extcon_set_state(p_spdif->edev,
+				EXTCON_SPDIFIN_SAMPLERATE, 0);
+		} else if (mode >= 0) {
+			//pr_info("Event: EXTCON_SPDIFIN_SAMPLERATE, new sample rate:%s\n",
+			//	spdifin_samplerate[mode + 1]);
+			if (p_spdif && p_spdif->actrl && p_spdif->tddr)
+				aml_toddr_fast_reset(p_spdif->tddr);
+
+			extcon_set_state(p_spdif->edev,
+				EXTCON_SPDIFIN_SAMPLERATE, 1);
+		}
+	}
+
+	if (intrpt_status & 0x8) {
+		pr_info("Pc changed, try to read spdifin audio type\n");
+
+		extcon_set_state(p_spdif->edev,
+			EXTCON_SPDIFIN_AUDIOTYPE, 1);
+#ifdef __SPDIFIN_AUDIO_TYPE_HW_DETECT__
+		/* resample disable */
+		resample_set(0);
+#endif
+	}
+	if (intrpt_status & 0x10)
+		pr_info("Pd changed\n");
+	if (intrpt_status & 0x20) {
+		//pr_info("nonpcm to pcm\n");
+		extcon_set_state(p_spdif->edev,
+			EXTCON_SPDIFIN_AUDIOTYPE, 0);
+#ifdef __SPDIFIN_AUDIO_TYPE_HW_DETECT__
+		/* resample to 48k */
+	//	resample_set(3);
+#endif
+	}
+	if (intrpt_status & 0x40)
+		pr_info("valid changed\n");
+}
+
+#ifdef __SPDIFIN_AUDIO_TYPE_SW_DETECT__
+
+static void spdifin_audio_type_start_timer(
+	struct aml_spdif *p_spdif)
+{
+	p_spdif->timer.expires = jiffies + 1;
+	add_timer(&p_spdif->timer);
+}
+
+static void spdifin_audio_type_stop_timer(
+	struct aml_spdif *p_spdif)
+{
+	//del_timer_sync(&p_spdif->timer);
+	del_timer(&p_spdif->timer);
+}
+
+static void spdifin_audio_type_timer_func(unsigned long data)
+{
+	struct aml_spdif *p_spdif = (struct aml_spdif *)data;
+	unsigned long delay = msecs_to_jiffies(1);
+
+	schedule_work(&p_spdif->work);
+	mod_timer(&p_spdif->timer, jiffies + delay);
+}
+
+static void spdifin_audio_type_work_func(struct work_struct *work)
+{
+	int val = spdifin_get_ch_status0to31();
+
+
+	if (val & 0x2)
+		/* nonpcm, resample disable */
+		resample_set(0);
+	else
+		/* pcm, resample to 48k */
+		resample_set(3);
+}
+
+static void spdifin_audio_type_detect_init(struct aml_spdif *p_spdif)
+{
+	init_timer(&p_spdif->timer);
+	p_spdif->timer.function = spdifin_audio_type_timer_func;
+	p_spdif->timer.data = (unsigned long)p_spdif;
+
+	INIT_WORK(&p_spdif->work, spdifin_audio_type_work_func);
+}
+
+static void spdifin_audio_type_detect_deinit(struct aml_spdif *p_spdif)
+{
+	pr_info("%s\n", __func__);
+	cancel_work_sync(&p_spdif->work);
+}
+
+#endif
 
 static irqreturn_t aml_spdif_ddr_isr(int irq, void *devid)
 {
@@ -92,7 +371,9 @@ static irqreturn_t aml_spdifin_status_isr(int irq, void *devid)
 {
 	struct aml_spdif *p_spdif = (struct aml_spdif *)devid;
 
-	aml_spdifin_status_check(p_spdif->actrl);
+	spdifin_status_event(p_spdif);
+
+	aml_spdifin_clr_irq(p_spdif->actrl);
 
 	return IRQ_HANDLED;
 }
@@ -136,7 +417,9 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 						p_spdif->irq_spdifin);
 			return ret;
 		}
-
+#ifdef __SPDIFIN_AUDIO_TYPE_SW_DETECT__
+		spdifin_audio_type_detect_init(p_spdif);
+#endif
 	}
 
 	runtime->private_data = p_spdif;
@@ -155,6 +438,9 @@ static int aml_spdif_close(struct snd_pcm_substream *substream)
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		aml_audio_unregister_frddr(p_spdif->dev, substream);
 	} else {
+#ifdef __SPDIFIN_AUDIO_TYPE_SW_DETECT__
+		spdifin_audio_type_detect_deinit(p_spdif);
+#endif
 		aml_audio_unregister_toddr(p_spdif->dev, substream);
 		free_irq(p_spdif->irq_spdifin, p_spdif);
 	}
@@ -181,7 +467,34 @@ static int aml_spdif_hw_free(struct snd_pcm_substream *substream)
 
 static int aml_spdif_trigger(struct snd_pcm_substream *substream, int cmd)
 {
-	return 0;
+#ifdef __SPDIFIN_AUDIO_TYPE_SW_DETECT__
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct aml_spdif *p_spdif = runtime->private_data;
+#endif
+	int ret = 0;
+
+	switch (cmd) {
+	case SNDRV_PCM_TRIGGER_START:
+	case SNDRV_PCM_TRIGGER_RESUME:
+	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+#ifdef __SPDIFIN_AUDIO_TYPE_SW_DETECT__
+		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+			spdifin_audio_type_start_timer(p_spdif);
+#endif
+		break;
+	case SNDRV_PCM_TRIGGER_SUSPEND:
+	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+	case SNDRV_PCM_TRIGGER_STOP:
+#ifdef __SPDIFIN_AUDIO_TYPE_SW_DETECT__
+		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+			spdifin_audio_type_stop_timer(p_spdif);
+#endif
+		break;
+	default:
+		ret = -EINVAL;
+	}
+
+	return ret;
 }
 
 static int aml_spdif_prepare(struct snd_pcm_substream *substream)
@@ -276,6 +589,16 @@ struct snd_soc_platform_driver aml_spdif_platform = {
 
 static int aml_dai_spdif_probe(struct snd_soc_dai *cpu_dai)
 {
+	//struct aml_spdif *p_spdif = snd_soc_dai_get_drvdata(cpu_dai);
+	int ret = 0;
+
+//	if (p_spdif->id == SPDIF_A) {
+		ret = snd_soc_add_dai_controls(cpu_dai, snd_spdif_controls,
+					ARRAY_SIZE(snd_spdif_controls));
+		if (ret < 0)
+			pr_err("%s, failed add snd spdif controls\n", __func__);
+//	}
+
 	pr_info("asoc debug: %s-%d\n", __func__, __LINE__);
 
 	return 0;
@@ -330,6 +653,10 @@ static int aml_dai_spdif_startup(
 			pr_err("Can't enable pcm clk_spdifin clock: %d\n", ret);
 			goto err;
 		}
+#ifdef __SPDIFIN_AUDIO_TYPE_HW_DETECT__
+		/* resample to 48k in default */
+		resample_set(3);
+#endif
 	}
 
 	return 0;
@@ -343,13 +670,17 @@ static void aml_dai_spdif_shutdown(
 	struct snd_soc_dai *cpu_dai)
 {
 	struct aml_spdif *p_spdif = snd_soc_dai_get_drvdata(cpu_dai);
-
+	pr_info("%s \n", __func__);
 	/* disable clock and gate */
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		clk_disable_unprepare(p_spdif->clk_spdifout);
 		clk_disable_unprepare(p_spdif->sysclk);
 		clk_disable_unprepare(p_spdif->gate_spdifout);
 	} else {
+#ifdef __SPDIFIN_AUDIO_TYPE_HW_DETECT__
+		/* resample disabled */
+		resample_set(0);
+#endif
 		clk_disable_unprepare(p_spdif->clk_spdifin);
 		clk_disable_unprepare(p_spdif->fixed_clk);
 		clk_disable_unprepare(p_spdif->gate_spdifin);
@@ -378,6 +709,7 @@ static int aml_dai_spdif_prepare(
 		aml_frddr_set_fifos(fr, 0x40, 0x20);
 	} else {
 		struct toddr *to = p_spdif->tddr;
+		struct toddr_fmt fmt;
 		unsigned int msb, lsb, toddr_type;
 
 		if (loopback_is_enable()) {
@@ -408,7 +740,7 @@ static int aml_dai_spdif_prepare(
 				toddr_type = 4;
 				break;
 			case 32:
-				toddr_type = 3;
+				toddr_type = 4;
 				break;
 			default:
 				dev_err(p_spdif->dev,
@@ -425,8 +757,17 @@ static int aml_dai_spdif_prepare(
 		}
 
 		// to ddr spdifin
+		fmt.type       = toddr_type;
+		fmt.msb        = msb;
+		fmt.lsb        = lsb;
+		if (bit_depth == 32)
+			fmt.endian = 5;
+		else
+			fmt.endian = 0;
+		fmt.ch_num     = runtime->channels;
+		fmt.bit_depth  = bit_depth;
 		aml_toddr_select_src(to, SPDIFIN);
-		aml_toddr_set_format(to, toddr_type, msb, lsb);
+		aml_toddr_set_format(to, &fmt);
 		aml_toddr_set_fifos(to, 0x40);
 	}
 
@@ -474,7 +815,6 @@ static int aml_dai_spdif_trigger(struct snd_pcm_substream *substream, int cmd,
 
 	return 0;
 }
-
 static int aml_dai_spdif_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params,
 				struct snd_soc_dai *cpu_dai)
@@ -490,7 +830,7 @@ static int aml_dai_spdif_hw_params(struct snd_pcm_substream *substream,
 		snd_soc_dai_set_sysclk(cpu_dai,
 				0, rate, SND_SOC_CLOCK_OUT);
 	} else {
-		clk_set_rate(p_spdif->clk_spdifin, 250000000);
+		clk_set_rate(p_spdif->clk_spdifin, 250000000 * 2);
 	}
 
 	return ret;
@@ -524,13 +864,15 @@ static void aml_set_spdifclk(struct aml_spdif *p_spdif)
 static int aml_dai_set_spdif_sysclk(struct snd_soc_dai *cpu_dai,
 				int clk_id, unsigned int freq, int dir)
 {
-	struct aml_spdif *p_spdif = snd_soc_dai_get_drvdata(cpu_dai);
+	if (dir == SND_SOC_CLOCK_OUT) {
+		struct aml_spdif *p_spdif = snd_soc_dai_get_drvdata(cpu_dai);
 
-	p_spdif->sysclk_freq = freq;
-	pr_info("aml_dai_set_spdif_sysclk, %d, %d, %d\n",
-			clk_id, freq, dir);
+		p_spdif->sysclk_freq = freq;
+		pr_info("aml_dai_set_spdif_sysclk, %d, %d, %d\n",
+				clk_id, freq, dir);
 
-	aml_set_spdifclk(p_spdif);
+		aml_set_spdifclk(p_spdif);
+	}
 
 	return 0;
 }
@@ -687,6 +1029,21 @@ static int aml_spdif_platform_probe(struct platform_device *pdev)
 	}
 
 	pr_info("%s, register soc platform\n", __func__);
+
+	/* spdifin sample rate change event */
+	aml_spdif->edev = devm_extcon_dev_allocate(dev, spdifin_extcon);
+	if (IS_ERR(aml_spdif->edev)) {
+		pr_err("failed to allocate spdifin extcon!!!\n");
+		ret = -ENOMEM;
+	} else {
+		aml_spdif->edev->dev.parent  = dev;
+		aml_spdif->edev->name = "spdifin_event";
+
+		dev_set_name(&aml_spdif->edev->dev, "spdifin_event");
+		ret = extcon_dev_register(aml_spdif->edev);
+		if (ret < 0)
+			pr_err("SPDIF IN extcon failed to register!!, ignore it\n");
+	}
 
 	return devm_snd_soc_register_platform(dev, &aml_spdif_platform);
 }
