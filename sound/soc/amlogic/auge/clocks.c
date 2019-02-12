@@ -311,6 +311,24 @@ static int aml_audio_clocks_probe(struct platform_device *pdev)
 	return 0;
 }
 
+/* mpll clk range from 5M to 500M */
+#define AML_MPLL_FREQ_MIN	5000000
+unsigned int aml_mpll_mclk_ratio(unsigned int freq)
+{
+	unsigned int i, ratio = 2;
+	unsigned int mpll_freq = 0;
+
+	for (i = 1; i < 15; i++) {
+		ratio = 1 << i;
+		mpll_freq = freq * ratio;
+
+		if (mpll_freq > AML_MPLL_FREQ_MIN)
+			break;
+	}
+
+	return ratio;
+}
+
 static const struct of_device_id amlogic_audio_clocks_of_match[] = {
 	{ .compatible = "amlogic, audio_clocks" },
 	{},
