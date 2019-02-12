@@ -64,6 +64,9 @@ struct aml_spdif {
 	struct timer_list timer;
 	struct work_struct work;
 #endif
+	int last_sample_mode;
+	bool extcon_sr_state;
+	bool extcon_at_state;
 };
 
 static const struct snd_pcm_hardware aml_spdif_hardware = {
@@ -197,7 +200,7 @@ static int spdifin_check_audio_type(void)
 		}
 	}
 
-	pr_info("%s audio type:%d\n", __func__, audio_type);
+	//pr_info("%s audio type:%d\n", __func__, audio_type);
 
 	return audio_type;
 }
@@ -231,14 +234,10 @@ static const struct snd_kcontrol_new snd_spdif_controls[] = {
 			 NULL),
 };
 
-int last_sample_mode;
-
-static void spdifin_status_event(struct aml_spdif *p_spdif)
+static irqreturn_t spdifin_status_event(struct aml_spdif *p_spdif)
 {
 	int intrpt_status;
-
-	if (p_spdif == NULL)
-		return;
+	irqreturn_t ret = IRQ_HANDLED;
 
 	/*
 	 * interrupt status, check and clear by reg_clk_interrupt;
@@ -253,34 +252,30 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 	if (intrpt_status & 0x4) {
 		int mode = (intrpt_status >> 28) & 0x7;
 
-		if (last_sample_mode == mode)
-			return;
-
-		last_sample_mode = mode;
-
-		//pr_info("sample mode changed, intrpt_status:0x%x, mode:0x%x\n",
-		//	intrpt_status, mode);
-
-		if ((mode == 0x7) || (((intrpt_status >> 18) & 0x3ff) == 0x3ff)) {
-			pr_info("Default value, not detect sample rate\n");
-			extcon_set_state(p_spdif->edev,
-				EXTCON_SPDIFIN_SAMPLERATE, 0);
-		} else if (mode >= 0) {
+		if (p_spdif->last_sample_mode == mode) {
+			/* do nothing */
+		} else if ((mode == 0x7) ||
+				(((intrpt_status >> 18) & 0x3ff) == 0x3ff)) {
+			//pr_info("Default value, not detect sample rate\n");
+			p_spdif->extcon_sr_state = 0;
+			ret = IRQ_WAKE_THREAD;
+		} else {
 			//pr_info("Event: EXTCON_SPDIFIN_SAMPLERATE, new sample rate:%s\n",
 			//	spdifin_samplerate[mode + 1]);
-			if (p_spdif && p_spdif->actrl && p_spdif->tddr)
+			if (p_spdif->actrl && p_spdif->tddr)
 				aml_toddr_fast_reset(p_spdif->tddr);
 
-			extcon_set_state(p_spdif->edev,
-				EXTCON_SPDIFIN_SAMPLERATE, 1);
+			p_spdif->extcon_sr_state = 1;
+			ret = IRQ_WAKE_THREAD;
 		}
+		p_spdif->last_sample_mode = mode;
 	}
 
 	if (intrpt_status & 0x8) {
 		pr_info("Pc changed, try to read spdifin audio type\n");
 
-		extcon_set_state(p_spdif->edev,
-			EXTCON_SPDIFIN_AUDIOTYPE, 1);
+		p_spdif->extcon_at_state = 1;
+		ret = IRQ_WAKE_THREAD;
 #ifdef __SPDIFIN_AUDIO_TYPE_HW_DETECT__
 		/* resample disable */
 		resample_set(0);
@@ -290,8 +285,8 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 		pr_info("Pd changed\n");
 	if (intrpt_status & 0x20) {
 		//pr_info("nonpcm to pcm\n");
-		extcon_set_state(p_spdif->edev,
-			EXTCON_SPDIFIN_AUDIOTYPE, 0);
+		p_spdif->extcon_at_state = 0;
+		ret = IRQ_WAKE_THREAD;
 #ifdef __SPDIFIN_AUDIO_TYPE_HW_DETECT__
 		/* resample to 48k */
 	//	resample_set(3);
@@ -299,6 +294,8 @@ static void spdifin_status_event(struct aml_spdif *p_spdif)
 	}
 	if (intrpt_status & 0x40)
 		pr_info("valid changed\n");
+
+	return ret;
 }
 
 #ifdef __SPDIFIN_AUDIO_TYPE_SW_DETECT__
@@ -370,10 +367,23 @@ static irqreturn_t aml_spdif_ddr_isr(int irq, void *devid)
 static irqreturn_t aml_spdifin_status_isr(int irq, void *devid)
 {
 	struct aml_spdif *p_spdif = (struct aml_spdif *)devid;
+	irqreturn_t ret;
 
-	spdifin_status_event(p_spdif);
+	ret = spdifin_status_event(p_spdif);
 
 	aml_spdifin_clr_irq(p_spdif->actrl);
+
+	return ret;
+}
+
+static irqreturn_t aml_spdifin_status_isr_thread(int irq, void *devid)
+{
+	struct aml_spdif *p_spdif = (struct aml_spdif *)devid;
+
+	extcon_set_state_sync(p_spdif->edev,
+			EXTCON_SPDIFIN_SAMPLERATE, p_spdif->extcon_sr_state);
+	extcon_set_state_sync(p_spdif->edev,
+			EXTCON_SPDIFIN_AUDIOTYPE, p_spdif->extcon_at_state);
 
 	return IRQ_HANDLED;
 }
@@ -409,8 +419,11 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 			return -ENXIO;
 		}
 
-		ret = request_irq(p_spdif->irq_spdifin,
-				aml_spdifin_status_isr, 0, "irq_spdifin",
+		ret = request_threaded_irq(p_spdif->irq_spdifin,
+				aml_spdifin_status_isr,
+				aml_spdifin_status_isr_thread,
+				0,
+				"irq_spdifin",
 				p_spdif);
 		if (ret) {
 			dev_err(p_spdif->dev, "failed to claim irq_spdifin %u\n",
@@ -619,6 +632,10 @@ static int aml_dai_spdif_startup(
 	int ret;
 
 	pr_info("asoc debug: %s-%d\n", __func__, __LINE__);
+
+	p_spdif->last_sample_mode = ~0;
+	p_spdif->extcon_sr_state = 0;
+	p_spdif->extcon_at_state = 0;
 
 	aml_spdif_fifo_reset(p_spdif->actrl, substream->stream);
 
