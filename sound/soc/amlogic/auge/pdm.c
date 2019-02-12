@@ -122,7 +122,7 @@ static int aml_pdm_filter_mode_set_enum(
 	return 0;
 }
 
-int pdm_hcic_shift_gain = 0;
+int pdm_hcic_shift_gain;
 
 static const char *const pdm_hcic_shift_gain_texts[] = {
 	"keep with coeff",
@@ -554,11 +554,18 @@ static int aml_pdm_dai_prepare(
 
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 		struct toddr *to = p_pdm->tddr;
+		struct toddr_fmt fmt;
 		unsigned int osr = 192;
 
 		/* to ddr pdmin */
+		fmt.type      = toddr_type;
+		fmt.msb       = 31;
+		fmt.lsb       = lsb;
+		fmt.endian    = 0;
+		fmt.ch_num    = runtime->channels;
+		fmt.bit_depth = bitwidth;
 		aml_toddr_select_src(to, PDMIN);
-		aml_toddr_set_format(to, toddr_type, 31, lsb);
+		aml_toddr_set_format(to, &fmt);
 		aml_toddr_set_fifos(to, 0x40);
 
 		aml_pdm_ctrl(p_pdm->actrl,

@@ -22,7 +22,9 @@
 #include "regs.h"
 #include "ddr_mngr.h"
 #include "audio_utils.h"
+#include "iomap.h"
 
+#include "resample_hw.h"
 #define DRV_NAME "aml_audio_ddr_manager"
 
 static DEFINE_MUTEX(ddr_mutex);
@@ -54,11 +56,28 @@ struct toddr {
 	unsigned int msb_bit;
 	unsigned int lsb_bit;
 	unsigned int reg_base;
+	unsigned int channels;
+	unsigned int bitdepth;
 	enum toddr_src src;
 	int is_lb; /* check whether for loopback */
+	unsigned int fifo_id;
 	int irq;
 	bool in_use: 1;
 	struct aml_audio_controller *actrl;
+};
+enum status {
+	DISABLED,
+	READY,    /* controls has set enable, but ddr is not in running */
+	RUNNING,
+};
+
+struct toddr_attach {
+	bool enable;
+	int status;
+	/* which module should be attached,
+	 * check which toddr in use should be attached
+	 */
+	enum toddr_src attach_module;
 };
 
 struct frddr {
@@ -75,6 +94,13 @@ struct frddr {
 #define DDRMAX 3
 static struct frddr frddrs[DDRMAX];
 static struct toddr toddrs[DDRMAX];
+
+/* resample */
+static struct toddr_attach attach_resample;
+static void aml_check_resample(bool enable);
+static bool aml_check_resample_module(int src);
+
+
 
 /* to DDRS */
 static struct toddr *register_toddr_l(struct device *dev,
@@ -178,6 +204,22 @@ int fetch_toddr_index_by_src(int toddr_src)
 	return -1;
 }
 
+struct toddr *fetch_toddr_by_src(int toddr_src)
+{
+	int i;
+
+	for (i = 0; i < DDRMAX; i++) {
+		if (toddrs[i].in_use
+			&& (toddrs[i].src == toddr_src)) {
+			return &toddrs[i];
+		}
+	}
+
+	pr_err("invalid toddr src\n");
+
+	return NULL;
+}
+
 struct toddr *aml_audio_register_toddr(struct device *dev,
 	struct aml_audio_controller *actrl,
 	irq_handler_t handler, void *data)
@@ -254,6 +296,55 @@ void aml_toddr_enable(struct toddr *to, bool enable)
 
 	reg = calc_toddr_address(EE_AUDIO_TODDR_A_CTRL0, reg_base);
 	aml_audiobus_update_bits(actrl,	reg, 1<<31, enable<<31);
+
+	/* check resample */
+	if (aml_check_resample_module(to->src))
+		aml_check_resample(enable);
+
+	if (!enable)
+	 aml_audiobus_write(actrl, reg, 0x0);
+}
+
+void aml_toddr_fast_reset(struct toddr *to)
+{
+	struct aml_audio_controller *actrl = to->actrl;
+	unsigned int reg_base = to->reg_base;
+	unsigned int reg, val, reg_spdif, val_spdif;
+	unsigned int asr_ctrl_val;
+
+	reg = calc_toddr_address(EE_AUDIO_TODDR_A_CTRL0, reg_base);
+	val = aml_audiobus_read(actrl, reg);
+
+	val &= ~(1 << 31);
+	aml_audiobus_write(actrl, reg, val);
+
+	reg_spdif = EE_AUDIO_SPDIFIN_CTRL0;
+	val_spdif = aml_audiobus_read(actrl, reg_spdif);
+	val_spdif &= ~(0x1 << 31);
+	aml_audiobus_write(actrl, reg_spdif, val_spdif);
+	val_spdif &= ~(0x3 << 28);
+	aml_audiobus_write(actrl, reg_spdif, val_spdif);
+	val_spdif |= (0x1 << 29);
+	aml_audiobus_write(actrl, reg_spdif, val_spdif);
+	val_spdif |= (0x1 << 28);
+	aml_audiobus_write(actrl, reg_spdif, val_spdif);
+
+	val |= (1 << 31);
+	aml_audiobus_write(actrl, reg, val);
+
+	val_spdif |= (0x1 << 31);
+	aml_audiobus_write(actrl, reg_spdif, val_spdif);
+
+	asr_ctrl_val = audiobus_read(EE_AUDIO_RESAMPLE_CTRL0);
+	asr_ctrl_val &= ~(1 << 28);
+	audiobus_write(EE_AUDIO_RESAMPLE_CTRL0, asr_ctrl_val);
+	asr_ctrl_val |= (1 << 31);
+	audiobus_write(EE_AUDIO_RESAMPLE_CTRL0, asr_ctrl_val);
+	asr_ctrl_val &= ~(1 << 31);
+	audiobus_write(EE_AUDIO_RESAMPLE_CTRL0, asr_ctrl_val);
+	asr_ctrl_val |= (1 << 28);
+	audiobus_write(EE_AUDIO_RESAMPLE_CTRL0, asr_ctrl_val);
+
 }
 
 void aml_toddr_select_src(struct toddr *to, enum toddr_src src)
@@ -286,17 +377,125 @@ void aml_toddr_set_fifos(struct toddr *to, unsigned int thresh)
 	aml_audiobus_write(actrl, reg, (thresh-1)<<16|2<<8);
 }
 
-void aml_toddr_set_format(struct toddr *to,
-	unsigned int type, unsigned int msb, unsigned int lsb)
+void aml_toddr_set_format(struct toddr *to, struct toddr_fmt *fmt)
 {
 	struct aml_audio_controller *actrl = to->actrl;
 	unsigned int reg_base = to->reg_base;
 	unsigned int reg;
 
+	to->channels = fmt->ch_num;
+	to->bitdepth = fmt->bit_depth;
+
 	reg = calc_toddr_address(EE_AUDIO_TODDR_A_CTRL0, reg_base);
-	aml_audiobus_update_bits(actrl, reg, 0x1fff<<3,
-				type<<13|msb<<8|lsb<<3);
+	aml_audiobus_update_bits(actrl, reg,
+		0x7 << 24 | 0x1fff << 3,
+		fmt->endian << 24 | fmt->type << 13 |
+		fmt->msb << 8 | fmt->lsb << 3);
 }
+
+void aml_toddr_set_resample(struct toddr *to, bool enable)
+{
+	struct aml_audio_controller *actrl = to->actrl;
+	unsigned int reg_base = to->reg_base;
+	unsigned int reg;
+
+	pr_info("toddr selects data to resample, is_resample:%d\n",
+		enable);
+	reg = calc_toddr_address(EE_AUDIO_TODDR_A_CTRL0, reg_base);
+	aml_audiobus_update_bits(actrl,	reg, 1<<30, enable<<30);
+}
+
+static void aml_set_resample(struct toddr *to,
+	bool enable)
+{
+	if (enable) {
+		int bitwidth = to->bitdepth;
+		/* channels and bit depth for resample */
+		if ((to->src == SPDIFIN) && (bitwidth >= 24))
+			bitwidth = 24;
+		resample_format_set(to->channels, bitwidth);
+
+		/* toddr index for resample */
+		resample_src_select(to->fifo_id);
+	}
+
+	/* resample enable or not */
+	resample_enable(enable);
+	/* select reample data */
+	aml_toddr_set_resample(to, enable);
+}
+
+void aml_resample_enable(bool enable, int resample_module)
+{
+	attach_resample.enable = enable;
+	attach_resample.attach_module = resample_module;
+
+	aml_check_resample(enable);
+}
+
+static bool aml_check_resample_module(int src)
+{
+	bool is_module_resample = false;
+
+	if (attach_resample.enable
+		&& (src == attach_resample.attach_module))
+		is_module_resample = true;
+
+	return is_module_resample;
+}
+
+/*
+ * when try to enable resample, if toddr is not in used,
+ * set resample status as ready
+ */
+static void aml_check_resample(bool enable)
+{
+	/* resample in enable */
+	if (attach_resample.enable) {
+		if (enable) {
+			/* check whether ready ? */
+			if ((attach_resample.status == DISABLED)
+				|| (attach_resample.status == READY)) {
+				struct toddr *to = fetch_toddr_by_src(
+					attach_resample.attach_module);
+
+				if (!to) {
+					attach_resample.status = READY;
+					pr_info("not in capture, Resample is ready\n");
+				} else {
+					attach_resample.status = RUNNING;
+					aml_set_resample(to, enable);
+					pr_info("Resample in running, module:%d, toddr:%d\n",
+						attach_resample.attach_module,
+						to->fifo_id);
+				}
+			}
+		} else {
+			if (attach_resample.status == RUNNING) {
+				struct toddr *to = fetch_toddr_by_src(
+					attach_resample.attach_module);
+
+				aml_set_resample(to, enable);
+				attach_resample.status = DISABLED;
+			}
+		}
+	} else {
+		/* ensure resample is disabled */
+		struct toddr *to = fetch_toddr_by_src(
+			attach_resample.attach_module);
+
+		if (to) {
+			pr_info("Resample in running, disable it\n");
+
+			/* select reample data */
+			aml_toddr_set_resample(to, false);
+			/* update resample status */
+			attach_resample.status = DISABLED;
+		}
+	}
+}
+
+
 
 /* from DDRS */
 static struct frddr *register_frddr_l(struct device *dev,
@@ -525,6 +724,10 @@ static int aml_ddr_mngr_platform_probe(struct platform_device *pdev)
 	toddrs[DDR_A].reg_base = EE_AUDIO_TODDR_A_CTRL0;
 	toddrs[DDR_B].reg_base = EE_AUDIO_TODDR_B_CTRL0;
 	toddrs[DDR_C].reg_base = EE_AUDIO_TODDR_C_CTRL0;
+	toddrs[DDR_A].fifo_id  = DDR_A;
+	toddrs[DDR_B].fifo_id  = DDR_B;
+	toddrs[DDR_C].fifo_id  = DDR_C;
+
 	frddrs[DDR_A].reg_base = EE_AUDIO_FRDDR_A_CTRL0;
 	frddrs[DDR_B].reg_base = EE_AUDIO_FRDDR_B_CTRL0;
 	frddrs[DDR_C].reg_base = EE_AUDIO_FRDDR_C_CTRL0;
