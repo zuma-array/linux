@@ -51,13 +51,38 @@ struct audioresample {
 
 	/*which module should be resampled */
 	int resample_module;
+
 	/*  resample to the rate */
-	int out_rate;
+	unsigned int out_rate;
+
+	int index;
 
 	bool enable;
 };
 
-struct audioresample *s_resample;
+static const char *const auge_resample_texts[] = {
+	"Disable",
+	"Enable:32K",
+	"Enable:44K",
+	"Enable:48K",
+	"Enable:88K",
+	"Enable:96K",
+	"Enable:176K",
+	"Enable:192K",
+};
+
+static const unsigned int auge_resample_values[] = {
+	0,
+	32000,
+	44100,
+	48000,
+	88200,
+	96000,
+	176400,
+	192000,
+};
+
+struct audioresample *s_resample = NULL;
 
 static int resample_clk_set(struct audioresample *p_resample)
 {
@@ -116,120 +141,65 @@ static int resample_clk_set(struct audioresample *p_resample)
 	return ret;
 }
 
-static void audio_resample_init(struct audioresample *p_resample)
-{
-	aml_resample_enable(p_resample->enable,
-		p_resample->resample_module);
-
-	resample_clk_set(p_resample);
-}
-
-static int audio_resample_set(int enable, int rate)
-{
-	if (!s_resample) {
-		pr_err("audio resample is not init\n");
-		return -EINVAL;
-	}
-
-	s_resample->enable = (bool)enable;
-	s_resample->out_rate = rate;
-	audio_resample_init(s_resample);
-
-	return 0;
-}
-
-static int auge_resample;
-
-static const char *const auge_resample_texts[] = {
-	"Disable",
-	"Enable:32K",
-	"Enable:44K",
-	"Enable:48K",
-	"Enable:88K",
-	"Enable:96K",
-	"Enable:176K",
-	"Enable:192K",
-};
-
 static const struct soc_enum auge_resample_enum =
 	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(auge_resample_texts),
 			auge_resample_texts);
 
-static int resample_get_enum(
-	struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
+static int resample_get_enum(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
 {
-	ucontrol->value.enumerated.item[0] = auge_resample;
+	struct audioresample *p_resample = s_resample;
+
+	ucontrol->value.enumerated.item[0] = 0;
+
+	if (p_resample != NULL)
+		ucontrol->value.enumerated.item[0] = p_resample->index;
 
 	return 0;
 }
 
 int resample_set(int index)
 {
-	int resample_rate = 0;
+	struct audioresample *p_resample = s_resample;
+	unsigned int resample_rate = 0;
 
-	if (index == 0)
-		resample_rate = 0;
-	else if (index == 1)
-		resample_rate = 32000;
-	else if (index == 2)
-		resample_rate = 44100;
-	else if (index == 3)
-		resample_rate = 48000;
-	else if (index == 4)
-		resample_rate = 88200;
-	else if (index == 5)
-		resample_rate = 96000;
-	else if (index == 6)
-		resample_rate = 176400;
-	else if (index == 7)
-		resample_rate = 192000;
-	else
+	if (!p_resample)
+		return -EINVAL;
+	if (p_resample->index == index)
 		return 0;
 
-	if (auge_resample == index)
-		return 0;
+	p_resample->index = index;
 
-	auge_resample = index;
+	if (p_resample->index < ARRAY_SIZE(auge_resample_values))
+		resample_rate = auge_resample_values[p_resample->index];
 
-	pr_info("%s %s\n",
-		__func__,
-		auge_resample_texts[auge_resample]);
+	pr_info("%s %d\n", __func__, resample_rate);
 
-	if (audio_resample_set(index, resample_rate))
-		return 0;
+	p_resample->enable = (resample_rate > 0);
+	p_resample->out_rate = resample_rate;
 
-	if (index == 0)
+	aml_resample_enable(p_resample->enable,
+			p_resample->resample_module);
+
+	resample_clk_set(p_resample);
+
+	if (p_resample->out_rate == 0) {
 		resample_disable();
-	else {
-		resample_init(resample_rate);
+	} else {
+		resample_init(p_resample->out_rate);
 
-		resample_set_hw_param(index - 1);
+		resample_set_hw_param(p_resample->index - 1);
 	}
-	/*
-	 *	if (index > 0
-	 *		&& p_aml_audio
-	 *		&& p_cardinfo)
-	 *		p_cardinfo->set_resample_param(index - 1);
-	 */
 
 	return 0;
 }
 
-static int resample_set_enum(
-	struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
+static int resample_set_enum(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
 {
-/*	struct snd_soc_card *card =  snd_kcontrol_chip(kcontrol);
- *	struct aml_audio_private_data *p_aml_audio =
- *			snd_soc_card_get_drvdata(card);
- *	struct aml_card_info *p_cardinfo = p_aml_audio->cardinfo;
- */
 	int index = ucontrol->value.enumerated.item[0];
 
-	resample_set(index);
-
-	return 0;
+	return resample_set(index);
 }
 
 static int mixer_audiobus_read(
@@ -276,20 +246,20 @@ static int mixer_audiobus_write(
 }
 
 static const struct snd_kcontrol_new snd_resample_controls[] = {
-
-	/* resample */
 	SOC_ENUM_EXT("Hardware resample enable",
-		     auge_resample_enum,
-		     resample_get_enum,
-		     resample_set_enum),
+			auge_resample_enum,
+			resample_get_enum,
+			resample_set_enum),
 	SOC_SINGLE_EXT_TLV("Hw resample pause enable",
-			 EE_AUDIO_RESAMPLE_CTRL2, 24, 0x1, 0,
-			 mixer_audiobus_read, mixer_audiobus_write,
-			 NULL),
+			EE_AUDIO_RESAMPLE_CTRL2, 24, 0x1, 0,
+			mixer_audiobus_read,
+			mixer_audiobus_write,
+			NULL),
 	SOC_SINGLE_EXT_TLV("Hw resample pause thd",
-			 EE_AUDIO_RESAMPLE_CTRL2, 0, 0xffffff, 0,
-			 mixer_audiobus_read, mixer_audiobus_write,
-			 NULL),
+			EE_AUDIO_RESAMPLE_CTRL2, 0, 0xffffff, 0,
+			mixer_audiobus_read,
+			mixer_audiobus_write,
+			NULL),
 };
 
 int card_add_resample_kcontrols(struct snd_soc_card *card)
