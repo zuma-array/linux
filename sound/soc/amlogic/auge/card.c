@@ -126,12 +126,15 @@ static int jack_audio_hp_detect(struct aml_card_data *card_data)
 
 	card_data->hp_cur_state =
 		gpio_get_value_cansleep(card_data->hp_jack.gpio.gpio);
+	if (card_data->mic_jack.gpio.invert)
+		card_data->hp_cur_state = !card_data->hp_cur_state;
 	if (card_data->hp_last_state != card_data->hp_cur_state) {
 		while (loop_num < 5) {
 			card_data->hp_cur_state =
 				gpio_get_value_cansleep(
 					card_data->hp_jack.gpio.gpio);
-
+			if (card_data->mic_jack.gpio.invert)
+				card_data->hp_cur_state = !card_data->hp_cur_state;
 			if (card_data->hp_last_state != card_data->hp_cur_state)
 				change_cnt++;
 			else
@@ -156,11 +159,15 @@ static int jack_audio_micphone_detect(struct aml_card_data *card_data)
 
 	card_data->micphone_cur_state =
 		gpio_get_value_cansleep(card_data->mic_jack.gpio.gpio);
+	if (card_data->mic_jack.gpio.invert)
+		card_data->micphone_cur_state = !card_data->micphone_cur_state;
 	if (card_data->micphone_last_state != card_data->micphone_cur_state) {
 		while (loop_num < 5) {
 			card_data->micphone_cur_state =
 				gpio_get_value_cansleep(
 					card_data->mic_jack.gpio.gpio);
+			if (card_data->mic_jack.gpio.invert)
+				card_data->micphone_cur_state = !card_data->micphone_cur_state;
 			if (card_data->micphone_last_state !=
 				card_data->micphone_cur_state)
 				change_cnt++;
@@ -219,15 +226,15 @@ static void jack_work_func(struct work_struct *work)
 			card_data->mic_detect_flag = flag;
 
 			if (flag) {
-				extcon_set_state_sync(audio_extcon_headphone,
+				extcon_set_state_sync(audio_extcon_microphone,
 					EXTCON_JACK_MICROPHONE, 1);
-				snd_soc_jack_report(&card_data->hp_jack.jack,
-					status, SND_JACK_HEADPHONE);
+				snd_soc_jack_report(&card_data->mic_jack.jack,
+					status, SND_JACK_MICROPHONE);
 			} else {
-				extcon_set_state_sync(audio_extcon_headphone,
+				extcon_set_state_sync(audio_extcon_microphone,
 					EXTCON_JACK_MICROPHONE, 0);
-				snd_soc_jack_report(&card_data->hp_jack.jack, 0,
-						SND_JACK_HEADPHONE);
+				snd_soc_jack_report(&card_data->mic_jack.jack, 0,
+						SND_JACK_MICROPHONE);
 			}
 
 		}
