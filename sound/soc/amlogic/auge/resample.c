@@ -24,6 +24,7 @@
 #include <sound/soc.h>
 #include <sound/tlv.h>
 
+#include "clocks.h"
 #include "resample.h"
 #include "resample_hw.h"
 #include "ddr_mngr.h"
@@ -60,7 +61,8 @@ struct audioresample *s_resample;
 
 static int resample_clk_set(struct audioresample *p_resample)
 {
-	int ret;
+	int ret = 0;
+	unsigned int freq, ratio;
 
 	/* enable clock */
 	if (p_resample->enable) {
@@ -78,17 +80,6 @@ static int resample_clk_set(struct audioresample *p_resample)
 				return -EINVAL;
 			}
 		}
-		if (p_resample->out_rate) {
-			clk_set_rate(p_resample->sclk,
-				p_resample->out_rate * CLK_RATIO);
-			clk_set_rate(p_resample->clk,
-				p_resample->out_rate * CLK_RATIO);
-		} else {
-			/* defaule resample clk */
-			clk_set_rate(p_resample->sclk, 48000 * CLK_RATIO);
-			clk_set_rate(p_resample->clk, 48000 * CLK_RATIO);
-		}
-
 		if (!__clk_is_enabled(p_resample->pll)) {
 			ret = clk_prepare_enable(p_resample->pll);
 			if (ret) {
@@ -96,6 +87,17 @@ static int resample_clk_set(struct audioresample *p_resample)
 				return -EINVAL;
 			}
 		}
+
+		if (p_resample->out_rate > 0) {
+			freq = p_resample->out_rate * CLK_RATIO;
+		} else {
+			/* default resample clk */
+			freq = 48000 * CLK_RATIO;
+		}
+		ratio = aml_mpll_mclk_ratio(freq);
+		clk_set_rate(p_resample->pll, freq * ratio);
+		clk_set_rate(p_resample->sclk, freq);
+		clk_set_rate(p_resample->clk, freq);
 
 		pr_info("%s, resample_pll:%lu, sclk:%lu, clk:%lu\n",
 			__func__,

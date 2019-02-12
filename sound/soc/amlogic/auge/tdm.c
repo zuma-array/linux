@@ -34,6 +34,7 @@
 #include <linux/amlogic/clk_measure.h>
 #include <linux/amlogic/cpu_version.h>
 
+#include "clocks.h"
 #include "ddr_mngr.h"
 #include "tdm_hw.h"
 
@@ -615,24 +616,6 @@ static int aml_dai_set_tdm_fmt(struct snd_soc_dai *cpu_dai, unsigned int fmt)
 		cpu_dai->playback_active);
 
 	return 0;
-}
-
-/* mpll clk range from 5M to 500M */
-#define AML_MPLL_FREQ_MIN	5000000
-static unsigned int aml_mpll_mclk_ratio(unsigned int freq)
-{
-	unsigned int i, ratio = 2;
-	unsigned int mpll_freq = 0;
-
-	for (i = 1; i < 15; i++) {
-		ratio = 1 << i;
-		mpll_freq = freq * ratio;
-
-		if (mpll_freq > AML_MPLL_FREQ_MIN)
-			break;
-	}
-
-	return ratio;
 }
 
 static int aml_dai_set_tdm_sysclk(struct snd_soc_dai *cpu_dai,
