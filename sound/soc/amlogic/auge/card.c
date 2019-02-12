@@ -31,7 +31,7 @@
 #include <sound/soc-dai.h>
 #include "../../../../drivers/gpio/gpiolib.h"
 #include "card.h"
-
+#include <linux/clk-provider.h>
 struct aml_jack {
 	struct snd_soc_jack jack;
 	struct snd_soc_jack_pin pin;
@@ -405,9 +405,12 @@ static void aml_card_shutdown(struct snd_pcm_substream *substream)
 	struct aml_dai_props *dai_props =
 		aml_priv_to_props(priv, rtd->num);
 
-	clk_disable_unprepare(dai_props->cpu_dai.clk);
+	printk("aml_card_shutdown\n");
+	if (__clk_is_enabled(dai_props->cpu_dai.clk))
+		clk_disable_unprepare(dai_props->cpu_dai.clk);
+	if (__clk_is_enabled(dai_props->codec_dai.clk))
+		clk_disable_unprepare(dai_props->codec_dai.clk);
 
-	clk_disable_unprepare(dai_props->codec_dai.clk);
 }
 
 static int aml_card_hw_params(struct snd_pcm_substream *substream,
@@ -422,6 +425,12 @@ static int aml_card_hw_params(struct snd_pcm_substream *substream,
 		aml_priv_to_props(priv, rtd->num);
 	unsigned int mclk = 0, mclk_fs = 0;
 	int i = 0, ret = 0;
+	int clk_dir = 0;
+
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		clk_dir = SND_SOC_CLOCK_OUT;
+	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+		clk_dir = SND_SOC_CLOCK_IN;
 
 	if (priv->mclk_fs)
 		mclk_fs = priv->mclk_fs;
@@ -435,14 +444,14 @@ static int aml_card_hw_params(struct snd_pcm_substream *substream,
 			codec_dai = rtd->codec_dais[i];
 
 			ret = snd_soc_dai_set_sysclk(codec_dai, 0, mclk,
-				SND_SOC_CLOCK_IN);
+				clk_dir);
 
 			if (ret && ret != -ENOTSUPP)
 				goto err;
 		}
 
 		ret = snd_soc_dai_set_sysclk(cpu_dai, 0, mclk,
-					     SND_SOC_CLOCK_OUT);
+					     clk_dir);
 		if (ret && ret != -ENOTSUPP)
 			goto err;
 

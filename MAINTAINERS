@@ -14266,3 +14266,10 @@ F:	drivers/amlogic/media/vout/lcd/lcd_extern/mipi_P070ACB.c
 AMLOGIC ADD SOUND EXTERNAL LOOPBACK FEATURE
 M:	Peipeng Zhao <peipeng.zhao@amlogic.com>
 F:	Documentation/devicetree/bindings/amlogic/axg-sound-loopback.txt
+
+AMLOGIC AUDIO ASRC
+M: wang xing <xing.wang@amlogic.com>
+F: sound/soc/amlogic/auge/resample.c
+F: sound/soc/amlogic/auge/resample.h
+F: sound/soc/amlogic/auge/resample_hw.c
+F: sound/soc/amlogic/auge/resample_hw.h

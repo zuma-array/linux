@@ -54,8 +54,18 @@ enum frddr_dest {
 	SPDIFOUT,
 };
 
+struct toddr_fmt {
+	unsigned int type;
+	unsigned int msb;
+	unsigned int lsb;
+	unsigned int endian;
+	unsigned int ch_num;
+	unsigned int bit_depth;
+};
+
 /* to ddrs */
 int fetch_toddr_index_by_src(int toddr_src);
+struct toddr *fetch_toddr_by_src(int toddr_src);
 struct toddr *aml_audio_register_toddr(struct device *dev,
 		struct aml_audio_controller *actrl,
 		irq_handler_t handler, void *data);
@@ -67,9 +77,11 @@ unsigned int aml_toddr_get_position(struct toddr *to);
 void aml_toddr_select_src(struct toddr *to, enum toddr_src);
 void aml_toddr_enable(struct toddr *to, bool enable);
 void aml_toddr_set_fifos(struct toddr *to, unsigned int thresh);
-void aml_toddr_set_format(struct toddr *to,
-		unsigned int type, unsigned int msb, unsigned int lsb);
+void aml_toddr_set_format(struct toddr *to, struct toddr_fmt *fmt);
+void aml_toddr_fast_reset(struct toddr *to);
 
+/* resample */
+void aml_resample_enable(bool enable, int resample_module);
 /* from ddrs */
 int fetch_frddr_index_by_src(int frddr_src);
 

@@ -42,7 +42,7 @@ void aml_spdif_arb_config(struct aml_audio_controller *actrl)
 	aml_audiobus_write(actrl, EE_AUDIO_ARB_CTRL, 1<<31|0xff<<0);
 }
 
-void aml_spdifin_status_check(struct aml_audio_controller *actrl)
+int aml_spdifin_status_check(struct aml_audio_controller *actrl)
 {
 	unsigned int val;
 
@@ -50,7 +50,11 @@ void aml_spdifin_status_check(struct aml_audio_controller *actrl)
 		EE_AUDIO_SPDIFIN_STAT0);
 
 	/* pr_info("\t--- spdif handles status0 %#x\n", val); */
+	return val;
+}
 
+void aml_spdifin_clr_irq(struct aml_audio_controller *actrl)
+{
 	aml_audiobus_update_bits(actrl,
 			EE_AUDIO_SPDIFIN_CTRL0,
 			1<<26,
@@ -135,6 +139,29 @@ void aml_spdif_fifo_ctrl(
 			1<<4);
 	} else {
 		unsigned int lsb;
+		unsigned int spdifin_clk = 250000000 * 2;
+
+		/* sysclk/rate/32(bit)/2(ch)/2(bmc) */
+		unsigned int counter_32k  = (spdifin_clk / (32000  * 64));
+		unsigned int counter_44k  = (spdifin_clk / (44100  * 64));
+		unsigned int counter_48k  = (spdifin_clk / (48000  * 64));
+		unsigned int counter_88k  = (spdifin_clk / (88200  * 64));
+		unsigned int counter_96k  = (spdifin_clk / (96000  * 64));
+		unsigned int counter_176k = (spdifin_clk / (176400 * 64));
+		unsigned int counter_192k = (spdifin_clk / (192000 * 64));
+		unsigned int mode0_th = 3 * (counter_32k + counter_44k) >> 1;
+		unsigned int mode1_th = 3 * (counter_44k + counter_48k) >> 1;
+		unsigned int mode2_th = 3 * (counter_48k + counter_88k) >> 1;
+		unsigned int mode3_th = 3 * (counter_88k + counter_96k) >> 1;
+		unsigned int mode4_th = 3 * (counter_96k + counter_176k) >> 1;
+		unsigned int mode5_th = 3 * (counter_176k + counter_192k) >> 1;
+		unsigned int mode0_timer = counter_32k >> 1;
+		unsigned int mode1_timer = counter_44k >> 1;
+		unsigned int mode2_timer = counter_48k >> 1;
+		unsigned int mode3_timer = counter_88k >> 1;
+		unsigned int mode4_timer = counter_96k >> 1;
+		unsigned int mode5_timer = counter_176k >> 1;
+		unsigned int mode6_timer = counter_192k >> 1;
 
 		if (bitwidth <= 24)
 			lsb = 28 - bitwidth;
@@ -145,7 +172,34 @@ void aml_spdif_fifo_ctrl(
 		aml_audiobus_write(actrl,
 			EE_AUDIO_SPDIFIN_CTRL1,
 			0xff << 20 | 25000 << 0);
+#if 1
+		aml_audiobus_write(actrl,
+			EE_AUDIO_SPDIFIN_CTRL2,
+			mode0_th << 20 |
+			mode1_th << 10 |
+			mode2_th << 0);
 
+		aml_audiobus_write(actrl,
+			EE_AUDIO_SPDIFIN_CTRL3,
+			mode3_th << 20 |
+			mode4_th << 10 |
+			mode5_th << 0);
+
+		aml_audiobus_write(actrl,
+			EE_AUDIO_SPDIFIN_CTRL4,
+			(mode0_timer << 24) |
+			(mode1_timer << 16) |
+			(mode2_timer << 8)  |
+			(mode3_timer << 0)
+			);
+
+		aml_audiobus_write(actrl,
+			EE_AUDIO_SPDIFIN_CTRL5,
+			(mode4_timer << 24) |
+			(mode5_timer << 16) |
+			(mode6_timer << 8)
+			);
+#else
 		aml_audiobus_write(actrl,
 			EE_AUDIO_SPDIFIN_CTRL2,
 			140 << 20 | 100 << 10 | 86 << 0);
@@ -169,11 +223,11 @@ void aml_spdif_fifo_ctrl(
 			(9<<8) |  /* reg_sample_mode6_timer   = 5[15:8]; */
 			(0<<0)	   /* reg_sample_mode7_timer	  = 5[7:0]; */
 			);
-
+#endif
 		aml_audiobus_update_bits(actrl,
 			EE_AUDIO_SPDIFIN_CTRL0,
-			0x3<<24|1<<12,
-			3<<24|1<<12);
+			0x1<<25|0x1<<24|1<<12,
+			0x1<<25|0x0<<24|1<<12);
 	}
 
 }
@@ -201,4 +255,41 @@ void spdifin_set_channel_status(int ch, int bits)
 	audiobus_update_bits(EE_AUDIO_SPDIFIN_CTRL0,
 		0xf << 8,
 		ch_status_sel << 8);
+}
+int spdifin_get_sample_rate(void)
+{
+	unsigned int val;
+
+	val = audiobus_read(EE_AUDIO_SPDIFIN_STAT0);
+	if (((val >> 18) & 0x3ff) == 0x3ff) //N/A
+		return 7;
+
+	return (val >> 28) & 0x7;
+}
+
+static int spdifin_get_channel_status(int sel)
+{
+	unsigned int val;
+
+	/* set ch_status_sel to channel status */
+	audiobus_update_bits(EE_AUDIO_SPDIFIN_CTRL0, 0xf << 8, sel << 8);
+
+	val = audiobus_read(EE_AUDIO_SPDIFIN_STAT1);
+
+	return val;
+}
+
+int spdifin_get_ch_status0to31(void)
+{
+	return spdifin_get_channel_status(0x0);
+}
+
+int spdifin_get_audio_type(void)
+{
+	unsigned int val;
+
+	/* set ch_status_sel to read Pc */
+	val = spdifin_get_channel_status(0x6);
+
+	return (val >> 16) & 0xff;
 }

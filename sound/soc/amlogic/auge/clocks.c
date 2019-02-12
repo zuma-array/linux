@@ -115,6 +115,12 @@ static struct clk_hw *audio_clk_hws[] = {
 const char *mclk_parent_names[] = {"mpll0", "mpll1", "mpll2", "mpll3",
 	"hifi_pll", "fclk_div3", "fclk_div4", "gp0_pll"};
 
+static const char *const audioclk_parent_names[] = {
+	"mclk_a", "mclk_b", "mclk_c", "mclk_d", "mclk_e",
+	"mclk_f", "i_slv_sclk_a", "i_slv_sclk_b", "i_slv_sclk_c",
+	"i_slv_sclk_d", "i_slv_sclk_e", "i_slv_sclk_f", "i_slv_sclk_g",
+	"i_slv_sclk_h", "i_slv_sclk_i", "i_slv_sclk_j"};
+
 #define CLOCK_COM_MUX(_name, _reg, _mask, _shift) \
 struct clk_mux _name##_mux = { \
 	.reg = (void __iomem *)(_reg), \
@@ -176,6 +182,11 @@ CLOCK_COM_GATE(pdmin0, AUD_ADDR_OFFSET(EE_AUDIO_CLK_PDMIN_CTRL0), 31);
 CLOCK_COM_MUX(pdmin1, AUD_ADDR_OFFSET(EE_AUDIO_CLK_PDMIN_CTRL1), 0x7, 24);
 CLOCK_COM_DIV(pdmin1, AUD_ADDR_OFFSET(EE_AUDIO_CLK_PDMIN_CTRL1), 0, 16);
 CLOCK_COM_GATE(pdmin1, AUD_ADDR_OFFSET(EE_AUDIO_CLK_PDMIN_CTRL1), 31);
+/* resample*/
+CLOCK_COM_MUX(resample, AUD_ADDR_OFFSET(EE_AUDIO_CLK_RESAMPLE_CTRL), 0xf, 24);
+/* div is fake */
+CLOCK_COM_DIV(resample, AUD_ADDR_OFFSET(EE_AUDIO_CLK_RESAMPLE_CTRL), 0, 0);
+CLOCK_COM_GATE(resample, AUD_ADDR_OFFSET(EE_AUDIO_CLK_RESAMPLE_CTRL), 31);
 
 #define IOMAP_COM_CLK(_name, _iobase) \
 do { \
@@ -187,6 +198,15 @@ do { \
 #define REGISTER_CLK_COM(_name) \
 	clk_register_composite(NULL, #_name, \
 			mclk_parent_names, ARRAY_SIZE(mclk_parent_names), \
+			&_name##_mux.hw, &clk_mux_ops, \
+			&_name##_div.hw, &clk_divider_ops, \
+			&_name##_gate.hw, &clk_gate_ops, \
+			CLK_SET_RATE_NO_REPARENT)
+
+#define REGISTER_AUDIOCLK_COM(_name) \
+	clk_register_composite(NULL, #_name, \
+			audioclk_parent_names, \
+			ARRAY_SIZE(audioclk_parent_names), \
 			&_name##_mux.hw, &clk_mux_ops, \
 			&_name##_div.hw, &clk_divider_ops, \
 			&_name##_gate.hw, &clk_gate_ops, \
@@ -233,6 +253,10 @@ static int register_audio_clk(struct clk **clks, void __iomem *iobase)
 	IOMAP_COM_CLK(pdmin1, iobase);
 	clks[CLKID_AUDIO_PDMIN1] = REGISTER_CLK_COM(pdmin1);
 	WARN_ON(IS_ERR(clks[CLKID_AUDIO_PDMIN1]));
+
+	IOMAP_COM_CLK(resample, iobase);
+	clks[CLKID_AUDIO_RESAMPLE_CTRL] = REGISTER_AUDIOCLK_COM(resample);
+	WARN_ON(IS_ERR_OR_NULL(clks[CLKID_AUDIO_RESAMPLE_CTRL]));
 
 	return 0;
 }
