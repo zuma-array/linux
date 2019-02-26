@@ -451,11 +451,12 @@ static int aml_spdif_close(struct snd_pcm_substream *substream)
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		aml_audio_unregister_frddr(p_spdif->dev, substream);
 	} else {
+		free_irq(p_spdif->irq_spdifin, p_spdif);
+
 #ifdef __SPDIFIN_AUDIO_TYPE_SW_DETECT__
 		spdifin_audio_type_detect_deinit(p_spdif);
 #endif
 		aml_audio_unregister_toddr(p_spdif->dev, substream);
-		free_irq(p_spdif->irq_spdifin, p_spdif);
 	}
 
 	runtime->private_data = NULL;
