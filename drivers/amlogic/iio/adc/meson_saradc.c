@@ -671,7 +671,7 @@ static int meson_sar_adc_iio_info_read_raw(struct iio_dev *indio_dev,
 		return ret;
 
 	case IIO_CHAN_INFO_SCALE:
-		*val = SAR_ADC_VREF * MILLION;
+		*val = SAR_ADC_VREF * 1000;
 		*val2 = priv->data->resolution;
 		return IIO_VAL_FRACTIONAL_LOG2;
 
