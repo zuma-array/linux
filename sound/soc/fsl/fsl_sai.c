@@ -746,7 +746,7 @@ static void fsl_sai_trigger_start_hwcounter(struct fsl_sai *sai, bool tx)
 		} else {
 			hwcounter_rate = sai->bclk_rate;
 		}
-		dev_info(&sai->pdev->dev, "hwcounter_rate is %u\n", hwcounter_rate);
+		dev_dbg(&sai->pdev->dev, "hwcounter_rate is %u\n", hwcounter_rate);
 
 		current_hwcounter = hwcounter_get_value(sai->hwcounter);
 		d = (s32)sai->trigger_target - (s32)current_hwcounter;
@@ -758,7 +758,7 @@ static void fsl_sai_trigger_start_hwcounter(struct fsl_sai *sai, bool tx)
 
 			/* we must call fsl_sai_trigger_start() even if we failed, to unblock the audio */
 			fsl_sai_trigger_start(sai, tx);
-			dev_info(&sai->pdev->dev, "Trigger failed because the target %u was too close or behind the counter %u\n", sai->trigger_target, current_hwcounter);
+			dev_dbg(&sai->pdev->dev, "Trigger failed because the target %u was too close or behind the counter %u\n", sai->trigger_target, current_hwcounter);
 		} else {
 			/* Calculate ktime */
 			ktime_t current_ktime;
@@ -776,14 +776,14 @@ static void fsl_sai_trigger_start_hwcounter(struct fsl_sai *sai, bool tx)
 
 			hrtimer_start(&sai->trigger_hrtimer, sai->trigger_time, HRTIMER_MODE_ABS);
 
-			dev_info(&sai->pdev->dev, "Hrtimer started for trigger target %u, current %u, delta %llu (%llu ms), rate %u\n",
+			dev_dbg(&sai->pdev->dev, "Hrtimer started for trigger target %u, current %u, delta %llu (%llu ms), rate %u\n",
 							sai->trigger_target, current_hwcounter, delta_ticks, div_u64(delta_ticks * 1000UL, hwcounter_rate), hwcounter_rate);
 
-			dev_info(&sai->pdev->dev, "Setting hrtimer to target %lld, current ktime %lld\n", ktime_to_ns(sai->trigger_time), ktime_to_ns(current_ktime));
+			dev_dbg(&sai->pdev->dev, "Setting hrtimer to target %lld, current ktime %lld\n", ktime_to_ns(sai->trigger_time), ktime_to_ns(current_ktime));
 		}
 	} else {
 		fsl_sai_trigger_start(sai, tx);
-		dev_info(&sai->pdev->dev, "no trigger scheduled, immediate start of playback\n");
+		dev_dbg(&sai->pdev->dev, "no trigger scheduled, immediate start of playback\n");
 	}
 }
 
