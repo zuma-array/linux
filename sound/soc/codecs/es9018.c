@@ -60,7 +60,9 @@
 /* ES9018_SOFT_VOL3 Masks */
 #define ES9018_SOFT_VOL3_VOL_RATE 7
 /* ES9018_GENERAL Masks */
-#define ES9018_SOFT_MUTE_MASK	3
+#define ES9018_SOFT_MUTE_CH_L	BIT(0)
+#define ES9018_SOFT_MUTE_CH_R	BIT(1)
+#define ES9018_SOFT_MUTE_MASK	(ES9018_SOFT_MUTE_CH_L | ES9018_SOFT_MUTE_CH_R)
 /* ES9018_CHIP_STATUS Masks */
 #define ES9018_CHIP_ID_MASK	0x3C
 
@@ -102,13 +104,17 @@ struct es9018_private {
 	unsigned int	format;
 	/* GPIO driving Reset pin, if any */
 	int		gpio_reset;
+	int		manual_mute;
 };
 
 static int es9018_digital_mute(struct snd_soc_dai *dai, int mute)
 {
+	struct es9018_private *priv = snd_soc_codec_get_drvdata(dai->codec);
+
+	/* On unmute, use switch control value instead */
 	return snd_soc_update_bits(dai->codec, ES9018_GENERAL,
 				   ES9018_SOFT_MUTE_MASK,
-				   mute ? ES9018_SOFT_MUTE_MASK : 0);
+				   mute ? ES9018_SOFT_MUTE_MASK : priv->manual_mute);
 }
 
 #define HBW_BCLK_RATE	(2822400UL)
@@ -126,6 +132,19 @@ static bool is_dsd(snd_pcm_format_t fmt)
 		default:
 			return false;
 	}
+}
+
+static int es9018_put_mute(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	struct es9018_private *priv = snd_soc_codec_get_drvdata(
+			snd_soc_kcontrol_codec(kcontrol));
+	int left = !ucontrol->value.integer.value[0];
+	int right = !ucontrol->value.integer.value[1];
+
+	priv->manual_mute = (left ? ES9018_SOFT_MUTE_CH_L : 0) |
+		(right ? ES9018_SOFT_MUTE_CH_R : 0);
+
+	return snd_soc_put_volsw(kcontrol, ucontrol);
 }
 
 static const char * const es9018_pcm_rolloff_filter_txt[] = {
@@ -154,7 +173,8 @@ static const DECLARE_TLV_DB_SCALE(vol_DAC_tlv, -12000, 50, 0);
 static const struct snd_kcontrol_new es9018_controls[] = {
 	SOC_DOUBLE_R_TLV("Master Playback Volume", ES9018_VOL1_LEFT,
 			ES9018_VOL2_RIGHT, 0, 240 , 1, vol_DAC_tlv),
-	SOC_DOUBLE("Master Playback Switch", ES9018_GENERAL, 0, 1, 1, 1),
+	SOC_DOUBLE_EXT("Master Playback Switch", ES9018_GENERAL, 0, 1, 1, 1,
+			snd_soc_get_volsw, es9018_put_mute),
 	SOC_ENUM("PCM Rolloff filter", es9018_pcm_rolloff_filter),
 	SOC_ENUM("DSD Rolloff filter", es9018_dsd_rolloff_filter),
 	SOC_ENUM("Audio Polarity", es9018_analog_polarity),
