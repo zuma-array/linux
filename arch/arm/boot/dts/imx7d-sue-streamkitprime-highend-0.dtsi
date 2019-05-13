@@ -7,7 +7,7 @@
 #include <dt-bindings/input/input.h>
 
 / {
-	model = "StreamUnlimited stream810 StreamKit Prime with voice daughter board";
+	model = "StreamUnlimited stream810 StreamKit Prime with highend daughter board";
 	compatible = "sue,streamkitprime-highend", "sue,streamkitprime", "sue,stream810", "fsl,imx7d";
 
 	audio {

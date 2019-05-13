@@ -10,7 +10,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_audio>;
 
-	model = "StreamUnlimited stream810 democlient board (imx7d)";
+	model = "StreamUnlimited stream810 democlient basic board (imx7d)";
 	compatible = "sue,stream810-demo", "sue,stream810", "fsl,imx7d";
 
 	audio {

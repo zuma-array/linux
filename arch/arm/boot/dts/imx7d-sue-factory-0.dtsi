@@ -7,7 +7,7 @@
 #include <dt-bindings/input/input.h>
 
 / {
-	model = "StreamUnlimited stream810 democlient board (imx7d)";
+	model = "StreamUnlimited stream810 factory board (imx7d)";
 	compatible = "sue,stream810-factory", "sue,stream810", "fsl,imx7d";
 
 	/*
