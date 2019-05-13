@@ -122,7 +122,7 @@
  * 	SIO			(1 << 30): Software Input On Field.
  */
 &iomuxc {
-	imx7d-sue-streamkitprime-voice {
+	imx7d-sue-streamkitprime-highend {
 		pinctrl_audio: audiogrp {
 			fsl,pins = <
 				MX7D_PAD_GPIO1_IO08__GPIO1_IO8		0x00    /* PCM/nDSD */
@@ -177,6 +177,6 @@
 };
 
 &iomuxc_lpsr {
-	imx7d-sue-streamkitprime-voice {
+	imx7d-sue-streamkitprime-highend {
 	};
 };
