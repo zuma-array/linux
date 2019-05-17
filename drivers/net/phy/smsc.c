@@ -23,6 +23,23 @@
 #include <linux/phy.h>
 #include <linux/netdevice.h>
 #include <linux/smscphy.h>
+#include <linux/debugfs.h>
+
+struct smsc_phy_priv {
+	/* Duty cycle for toggling power down bit.
+	 * The link is checked every `offtime` ms if the PHY is powered down
+	 * (taking into account that phy_read is executed every ~1s).
+	 * The PHY is powered for `ontime` ms to leave enough time for the link
+	 * to be detected.
+	 */
+	u32 ontime;
+	u32 offtime;
+	unsigned long last_ontime;
+	/* We can't rely on phydev->link to know if the device's powered down */
+	bool powered_down;
+	bool dbg;
+	struct dentry *debugfs;
+};
 
 static int smsc_phy_config_intr(struct phy_device *phydev)
 {
@@ -48,11 +65,14 @@ static int smsc_phy_config_init(struct phy_device *phydev)
 	if (rc < 0)
 		return rc;
 
+/* Energy power down doesn't work on LAN8720A: link changes aren't detected */
+#if 0
 	/* Enable energy detect mode for this SMSC Transceivers */
 	rc = phy_write(phydev, MII_LAN83C185_CTRL_STATUS,
 		       rc | MII_LAN83C185_EDPWRDOWN);
 	if (rc < 0)
 		return rc;
+#endif
 
 	return smsc_phy_ack_interrupt(phydev);
 }
@@ -90,47 +110,104 @@ static int lan911x_config_init(struct phy_device *phydev)
 	return smsc_phy_ack_interrupt(phydev);
 }
 
-/*
- * The LAN8710/LAN8720 requires a minimum of 2 link pulses within 64ms of each
- * other in order to set the ENERGYON bit and exit EDPD mode.  If a link partner
- * does send the pulses within this interval, the PHY will remained powered
- * down.
- *
- * This workaround will manually toggle the PHY on/off upon calls to read_status
- * in order to generate link test pulses if the link is down.  If a link partner
- * is present, it will respond to the pulses, which will cause the ENERGYON bit
- * to be set and will cause the EDPD mode to be exited.
- */
+int phy_modify(struct phy_device *phydev, u32 regnum, u16 mask, u16 set)
+{
+	int rc = phy_read(phydev, regnum);
+
+	if (rc < 0)
+		return rc;
+
+	rc = (rc & ~mask) | set;
+
+	return phy_write(phydev, regnum, rc);
+}
+
 static int lan87xx_read_status(struct phy_device *phydev)
 {
+	struct smsc_phy_priv *priv = phydev->priv;
 	int err = genphy_read_status(phydev);
 
-	if (!phydev->link) {
-		/* Disable EDPD to wake up PHY */
-		int rc = phy_read(phydev, MII_LAN83C185_CTRL_STATUS);
-		if (rc < 0)
-			return rc;
+	/* If we are in the powered_down state, phydev->link will be true for
+	 * one reason or another, so we manually need to keep track of that
+	 * using the powered_down flag.
+	 */
+	if (phydev->link && !priv->powered_down)
+		return err;
 
-		rc = phy_write(phydev, MII_LAN83C185_CTRL_STATUS,
-			       rc & ~MII_LAN83C185_EDPWRDOWN);
-		if (rc < 0)
-			return rc;
+	if (!priv->powered_down)
+		goto pdown;
 
-		/* Sleep 64 ms to allow ~5 link test pulses to be sent */
-		msleep(64);
+	/* Check if we passed at least offtime before powering up again. */
+	if (time_before(jiffies, msecs_to_jiffies(priv->offtime) +
+			priv->last_ontime)) {
+		/* Make sure we report that the link is not up when we are
+		 * powered_down, for reasons, see above.
+		 */
+		phydev->link = 0;
+		return err;
+	}
 
-		/* Re-enable EDPD */
-		rc = phy_read(phydev, MII_LAN83C185_CTRL_STATUS);
-		if (rc < 0)
-			return rc;
+	if (priv->dbg)
+		netdev_info(phydev->attached_dev, "powering up\n");
 
-		rc = phy_write(phydev, MII_LAN83C185_CTRL_STATUS,
-			       rc | MII_LAN83C185_EDPWRDOWN);
-		if (rc < 0)
-			return rc;
+	if (phydev->drv->soft_reset)
+		phydev->drv->soft_reset(phydev);
+
+	phy_modify(phydev, MII_BMCR, BMCR_ANENABLE | BMCR_PDOWN, BMCR_ANENABLE);
+	priv->powered_down = false;
+
+	/* After power up, wait at least ontime to make sure the PHY has time to
+	 * fully detect a link up of even the worst links.
+	 */
+	msleep(priv->ontime);
+
+	err = genphy_read_status(phydev);
+
+	if (priv->dbg)
+		netdev_info(phydev->attached_dev, phydev->link ? "got link\n" :
+			    "powering down\n");
+
+pdown:
+	if (!phydev->link && priv->offtime) {
+		phy_modify(phydev, MII_BMCR, BMCR_ANENABLE, 0);
+		phy_modify(phydev, MII_BMCR, BMCR_PDOWN, BMCR_PDOWN);
+		priv->last_ontime = jiffies;
+		priv->powered_down = true;
 	}
 
 	return err;
+}
+
+static int lan87xx_probe(struct phy_device *phydev)
+{
+	struct smsc_phy_priv *lan87xx;
+	struct dentry *smsc;
+
+	lan87xx = devm_kzalloc(&phydev->dev, sizeof(*lan87xx), GFP_KERNEL);
+	if (!lan87xx)
+		return -ENOMEM;
+
+	phydev->priv = lan87xx;
+
+	/* Default value for ontime duty cycle. Offtime is 0 and in this
+	 * configuration, the power consumption is the worst but the PHY is the
+	 * most responsive. */
+	lan87xx->ontime = 2000;
+
+	lan87xx->debugfs = debugfs_create_dir("ethernet", NULL);
+	smsc = debugfs_create_dir("smsc", lan87xx->debugfs);
+	debugfs_create_u32("ontime", S_IRUGO | S_IWUSR, smsc, &lan87xx->ontime);
+	debugfs_create_u32("offtime", S_IRUGO | S_IWUSR, smsc, &lan87xx->offtime);
+	debugfs_create_bool("dbg", S_IRUGO | S_IWUSR, smsc, &lan87xx->dbg);
+
+	return 0;
+}
+
+static void lan87xx_remove(struct phy_device* phydev)
+{
+	struct smsc_phy_priv *priv = phydev->priv;
+
+	debugfs_remove_recursive(priv->debugfs);
 }
 
 static struct phy_driver smsc_phy_driver[] = {
@@ -244,6 +321,8 @@ static struct phy_driver smsc_phy_driver[] = {
 	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
 
+	.probe		= lan87xx_probe,
+	.remove		= lan87xx_remove,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
 
