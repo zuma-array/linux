@@ -57,6 +57,8 @@ Main node optional properties:
 
  - migrate       : Function ID for MIGRATE operation
 
+ - disable-poweroff : Prevents the PSCI v0.2 driver from registering a power-off handler
+
 Device tree nodes that require usage of PSCI CPU_SUSPEND function (ie idle
 state nodes, as per bindings in [1]) must specify the following properties:
 
