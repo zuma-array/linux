@@ -597,6 +597,10 @@
 	};
 };
 
+&aml_reboot {
+	/delete-property/sys_poweroff;
+};
+
 &CPU0 {
 	cpu-supply = <&vdd_arm>;
 	operating-points-v2 = <&cpu_opp_table>;
@@ -694,6 +698,10 @@
 			function = "uart_b";
 		};
 	};
+};
+
+&psci {
+	disable-poweroff;
 };
 
 &wdt_ee {
