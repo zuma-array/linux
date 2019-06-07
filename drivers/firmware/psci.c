@@ -493,7 +493,7 @@ static void __init psci_init_migrate(void)
 	pr_info("Trusted OS resident on physical CPU 0x%lx\n", cpuid);
 }
 
-static void __init psci_0_2_set_functions(void)
+static void __init psci_0_2_set_functions(struct device_node *np)
 {
 	pr_info("Using standard PSCI v0.2 function IDs\n");
 	psci_function_id[PSCI_FN_CPU_SUSPEND] =
@@ -515,13 +515,14 @@ static void __init psci_0_2_set_functions(void)
 
 	arm_pm_restart = psci_sys_reset;
 
-	pm_power_off = psci_sys_poweroff;
+	if (!of_property_read_bool(np, "disable-poweroff"))
+		pm_power_off = psci_sys_poweroff;
 }
 
 /*
  * Probe function for PSCI firmware versions >= 0.2
  */
-static int __init psci_probe(void)
+static int __init psci_probe(struct device_node *np)
 {
 	u32 ver = psci_get_version();
 
@@ -534,7 +535,7 @@ static int __init psci_probe(void)
 		return -EINVAL;
 	}
 
-	psci_0_2_set_functions();
+	psci_0_2_set_functions(np);
 
 	psci_init_migrate();
 
@@ -568,7 +569,7 @@ static int __init psci_0_2_init(struct device_node *np)
 	 * can be carried out according to the specific version reported
 	 * by firmware
 	 */
-	err = psci_probe();
+	err = psci_probe(np);
 
 out_put_node:
 	of_node_put(np);
@@ -656,6 +657,6 @@ int __init psci_acpi_init(void)
 	else
 		invoke_psci_fn = __invoke_psci_fn_smc;
 
-	return psci_probe();
+	return psci_probe(NULL);
 }
 #endif
