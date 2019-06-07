@@ -137,7 +137,7 @@
 		interrupts = <GIC_PPI 9 0xf04>;
 	};
 
-	psci {
+	psci: psci {
 		compatible = "arm,psci-0.2";
 		method = "smc";
 	};
@@ -250,7 +250,7 @@
 		status = "okay";
 		cpuinfo_cmd = <0x82000044>;
 	};
-	aml_reboot{
+	aml_reboot: aml_reboot{
 		compatible = "aml, reboot";
 		sys_reset = <0x84000009>;
 		sys_poweroff = <0x84000008>;
