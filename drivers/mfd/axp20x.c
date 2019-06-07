@@ -868,7 +868,7 @@ EXPORT_SYMBOL(axp20x_device_probe);
 
 int axp20x_device_remove(struct axp20x_dev *axp20x)
 {
-	if (axp20x == axp20x_pm_power_off) {
+	if (axp20x == axp20x_pm_power_off && pm_power_off == axp20x_power_off) {
 		axp20x_pm_power_off = NULL;
 		pm_power_off = NULL;
 	}
