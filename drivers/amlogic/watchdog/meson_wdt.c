@@ -241,10 +241,12 @@ void aml_init_pdata(struct aml_wdt_dev *wdev)
 	clk = clk_get(wdev->dev, NULL);
 	aml_update_bits(wdev->reg_base + CTRL, 0x3<<21, 0x3<<21);
 	aml_update_bits(wdev->reg_base + CTRL, 0x3<<24, 0x3<<24);
-	aml_update_bits(wdev->reg_base + CTRL, 0x3ffff, 24000);
 
-	wdev->one_second = 1000;
-	wdev->max_timeout = 0xffff/1000;
+	/* 24 MHz / 48000 = 500 Hz ^= 2 ms / tick */
+	aml_update_bits(wdev->reg_base + CTRL, 0x3ffff, 48000 - 1);
+
+	wdev->one_second = 500; /* 1 sec. ^= 500 ticks */
+	wdev->max_timeout = 0xffff / wdev->one_second;
 	wdev->min_timeout = 1;
 }
 
