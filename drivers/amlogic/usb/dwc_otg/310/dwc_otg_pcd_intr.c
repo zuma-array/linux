@@ -2312,6 +2312,8 @@ static void complete_ep(dwc_otg_pcd_ep_t *ep)
 		dwc_otg_dev_out_ep_regs_t *out_ep_regs =
 		    dev_if->out_ep_regs[ep->dwc_ep.num];
 		desc_sts.d32 = 0;
+		deptsiz.d32 = 0;
+
 		if (core_if->dma_enable) {
 			if (core_if->dma_desc_enable) {
 				dma_desc = ep->dwc_ep.desc_addr;
