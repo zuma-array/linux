@@ -24,6 +24,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/clk.h>
+#include <linux/clk-provider.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/initval.h>
@@ -86,6 +87,7 @@ struct aml_tdm {
 	u32 sysclk_nominal;
 
 	bool enable_drift_compensator;
+	bool using_hifipll;
 };
 
 static const struct snd_pcm_hardware aml_tdm_hardware = {
@@ -624,9 +626,14 @@ static int aml_dai_set_tdm_sysclk(struct snd_soc_dai *cpu_dai,
 				int clk_id, unsigned int freq, int dir)
 {
 	struct aml_tdm *p_tdm = snd_soc_dai_get_drvdata(cpu_dai);
-	unsigned int ratio = aml_mpll_mclk_ratio(freq);
+	unsigned int ratio;
 	int sign;
 	unsigned int comp;
+
+	if (p_tdm->using_hifipll)
+		ratio = aml_hifipll_mclk_ratio(freq);
+	else
+		ratio = aml_mpll_mclk_ratio(freq);
 
 	/* save nominal sysclk for drift_comp calculation */
 	p_tdm->sysclk_nominal = freq;
@@ -954,6 +961,9 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Can't retrieve mpll2 clock\n");
 		return PTR_ERR(p_tdm->clk);
 	}
+
+	if (!strcmp(__clk_get_name(p_tdm->clk), "hifi_pll"))
+		p_tdm->using_hifipll = true;
 
 	p_tdm->enable_drift_compensator = of_property_read_bool(node, "enable-drift-compensator");
 
