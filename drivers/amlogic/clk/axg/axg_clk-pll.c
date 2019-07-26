@@ -119,6 +119,115 @@ static unsigned long meson_axg_pll_recalc_rate(struct clk_hw *hw,
 	return rate_mhz;
 }
 
+/*
+ * This calculates the fractional part based on the formula:
+ *
+ *          (rate * n * 2^od * 2^od2 - parent_rate * m) * 8192
+ *  frac = ----------------------------------------------------
+ *                            parent_rate
+ */
+static s16 calc_frac(unsigned long rate, unsigned long parent_rate, u16 m, u16 n, u16 od, u16 od2)
+{
+	return (((((s64)rate * n) << od << od2) - ((s64)parent_rate * m)) * 8192) / (s64)parent_rate;
+}
+
+/*
+ * This calculates the rate for a given parent_rate, m, n, od, od2 and frac value:
+ *
+ *        /                      parent_rate * frac  \            1
+ * rate = | parent_rate * m +  --------------------- | * -------------------
+ *        \                             8192         /     n * 2^od * n^od2
+ */
+unsigned long calc_rate(unsigned long parent_rate, u16 m, u16 n, u16 od, u16 od2, s16 frac)
+{
+	return ((((u64)parent_rate * m) + ((s64)parent_rate * frac) / 8192) / n) >> od >> od2;
+}
+
+static unsigned long meson_axg_frac_pll_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
+{
+	struct meson_clk_pll *pll = to_meson_clk_pll(hw);
+	struct parm *p;
+	u16 n, m, frac_raw = 0, od, od2 = 0;
+	s16 frac;
+	u32 reg;
+
+	p = &pll->n;
+	reg = readl(pll->base + p->reg_off);
+	n = PARM_GET(p->width, p->shift, reg);
+
+	p = &pll->m;
+	reg = readl(pll->base + p->reg_off);
+	m = PARM_GET(p->width, p->shift, reg);
+
+	p = &pll->od;
+	reg = readl(pll->base + p->reg_off);
+	od = PARM_GET(p->width, p->shift, reg);
+
+	p = &pll->od2;
+	reg = readl(pll->base + p->reg_off);
+	od2 = PARM_GET(p->width, p->shift, reg);
+
+	p = &pll->frac;
+	reg = readl(pll->base + p->reg_off);
+	frac_raw = PARM_GET(p->width, p->shift, reg);
+
+	/*
+	 * Sign extend if required
+	 */
+	if (frac_raw & (1 << 14))
+		frac_raw |= (1 << 15);
+
+	frac = (s16)frac_raw;
+
+	return calc_rate(parent_rate, m, n, od, od2, frac);
+}
+
+static const struct pll_rate_table *get_closest_rate_entry(struct meson_clk_pll *pll, unsigned long desired_rate)
+{
+	int min_error = INT_MAX;
+	int min_entry = -1;
+	int i;
+
+	for (i = 0; i < (pll->rate_count - 1); i++) {
+		int error = desired_rate - pll->rate_table[i].rate;
+
+		if (abs(error) < abs(min_error)) {
+			min_error = error;
+			min_entry = i;
+		}
+	}
+
+	if (abs(min_error) > 1000000)
+		pr_warn("%s: PLL base frequency error is higher than 1 MHz, probably a rate_table entry is missing\n", __func__);
+
+	BUG_ON(min_entry == -1);
+
+	return &(pll->rate_table[min_entry]);
+}
+
+static long meson_axg_frac_pll_round_rate(struct clk_hw *hw, unsigned long rate, unsigned long *parent_rate)
+{
+	struct meson_clk_pll *pll = to_meson_clk_pll(hw);
+	const struct pll_rate_table *rate_entry;
+	unsigned long rounded_rate;
+	s16 frac;
+
+	/* Get the closest rate */
+	rate_entry = get_closest_rate_entry(pll, rate);
+	rounded_rate = rate_entry->rate;
+
+	/*
+	 * Try to get a closer rate to the requested one by skewing the frac value
+	 * NOTE: The frac part has to be in the range below, otherwise the PLL is unstable
+	 */
+	frac = calc_frac(rate, *parent_rate, rate_entry->m, rate_entry->n, rate_entry->od, rate_entry->od2);
+	if (rate_entry->frac != frac && (frac > -16128 && frac < 16128)) {
+		rounded_rate = calc_rate(*parent_rate, rate_entry->m, rate_entry->n, rate_entry->od, rate_entry->od2, frac);
+	}
+
+	return rounded_rate;
+}
+
 static long meson_axg_pll_round_rate(struct clk_hw *hw, unsigned long rate,
 				     unsigned long *parent_rate)
 {
@@ -164,6 +273,49 @@ static int meson_axg_pll_wait_lock(struct meson_clk_pll *pll,
 	return -ETIMEDOUT;
 }
 
+/* Load default config and (re-)enable the PLL */
+static void meson_axg_pll_load_default(struct clk_hw *hw, bool enable)
+{
+	if (!strcmp(clk_hw_get_name(hw), "gp0_pll")
+		|| !strcmp(clk_hw_get_name(hw), "hifi_pll")
+		|| !strcmp(clk_hw_get_name(hw), "pcie_pll")) {
+
+		struct meson_clk_pll *pll = to_meson_clk_pll(hw);
+		struct parm *p = &pll->n;
+		void *cntlbase = pll->base + p->reg_off;
+
+		if (!strcmp(clk_hw_get_name(hw), "pcie_pll")) {
+			writel(AXG_PCIE_PLL_CNTL, cntlbase + (u64)(0*4));
+			writel(AXG_PCIE_PLL_CNTL1, cntlbase + (u64)(1*4));
+			writel(AXG_PCIE_PLL_CNTL2, cntlbase + (u64)(2*4));
+			writel(AXG_PCIE_PLL_CNTL3, cntlbase + (u64)(3*4));
+			writel(AXG_PCIE_PLL_CNTL4, cntlbase + (u64)(4*4));
+			writel(AXG_PCIE_PLL_CNTL5, cntlbase + (u64)(5*4));
+			writel(AXG_PCIE_PLL_CNTL6, cntlbase + (u64)(6*4));
+		} else if (!strcmp(clk_hw_get_name(hw), "hifi_pll")) {
+			writel(AXG_HIFI_PLL_CNTL1, cntlbase + (u64)6*4);
+			writel(AXG_HIFI_PLL_CNTL2, cntlbase + (u64)1*4);
+			writel(AXG_HIFI_PLL_CNTL3, cntlbase + (u64)2*4);
+			writel(AXG_HIFI_PLL_CNTL4, cntlbase + (u64)3*4);
+			writel(AXG_HIFI_PLL_CNTL5, cntlbase + (u64)4*4);
+		} else {
+			writel(GXL_GP0_CNTL1, cntlbase + (u64)6*4);
+			writel(GXL_GP0_CNTL2, cntlbase + (u64)1*4);
+			writel(GXL_GP0_CNTL3, cntlbase + (u64)2*4);
+			writel(GXL_GP0_CNTL4, cntlbase + (u64)3*4);
+			writel(GXL_GP0_CNTL5, cntlbase + (u64)4*4);
+		}
+
+		/* Only enable the PLL when explicitly requested */
+		if (enable) {
+			u32 reg;
+			reg = readl(pll->base + p->reg_off);
+			writel(((reg | (MESON_PLL_ENABLE)) &
+				(~MESON_PLL_RESET)), pll->base + p->reg_off);
+		}
+	}
+}
+
 static int meson_axg_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 				  unsigned long parent_rate)
 {
@@ -201,37 +353,7 @@ static int meson_axg_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 		}
 	}
 
-	if (!strcmp(clk_hw_get_name(hw), "gp0_pll")
-		|| !strcmp(clk_hw_get_name(hw), "hifi_pll")
-		|| !strcmp(clk_hw_get_name(hw), "pcie_pll")) {
-		void *cntlbase = pll->base + p->reg_off;
-
-		if (!strcmp(clk_hw_get_name(hw), "pcie_pll")) {
-			writel(AXG_PCIE_PLL_CNTL, cntlbase + (u64)(0*4));
-			writel(AXG_PCIE_PLL_CNTL1, cntlbase + (u64)(1*4));
-			writel(AXG_PCIE_PLL_CNTL2, cntlbase + (u64)(2*4));
-			writel(AXG_PCIE_PLL_CNTL3, cntlbase + (u64)(3*4));
-			writel(AXG_PCIE_PLL_CNTL4, cntlbase + (u64)(4*4));
-			writel(AXG_PCIE_PLL_CNTL5, cntlbase + (u64)(5*4));
-			writel(AXG_PCIE_PLL_CNTL6, cntlbase + (u64)(6*4));
-		} else if (!strcmp(clk_hw_get_name(hw), "hifi_pll")) {
-			writel(AXG_HIFI_PLL_CNTL1, cntlbase + (u64)6*4);
-			writel(AXG_HIFI_PLL_CNTL2, cntlbase + (u64)1*4);
-			writel(AXG_HIFI_PLL_CNTL3, cntlbase + (u64)2*4);
-			writel(AXG_HIFI_PLL_CNTL4, cntlbase + (u64)3*4);
-			writel(AXG_HIFI_PLL_CNTL5, cntlbase + (u64)4*4);
-		} else {
-			writel(GXL_GP0_CNTL1, cntlbase + (u64)6*4);
-			writel(GXL_GP0_CNTL2, cntlbase + (u64)1*4);
-			writel(GXL_GP0_CNTL3, cntlbase + (u64)2*4);
-			writel(GXL_GP0_CNTL4, cntlbase + (u64)3*4);
-			writel(GXL_GP0_CNTL5, cntlbase + (u64)4*4);
-		}
-
-		reg = readl(pll->base + p->reg_off);
-		writel(((reg | (MESON_PLL_ENABLE)) &
-			(~MESON_PLL_RESET)), pll->base + p->reg_off);
-	}
+	meson_axg_pll_load_default(hw, true);
 
 	reg = readl(pll->base + p->reg_off);
 
@@ -282,6 +404,139 @@ static int meson_axg_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 	}
 
 	return ret;
+}
+
+static int meson_axg_frac_pll_get_current_settings(struct meson_clk_pll *pll, struct pll_rate_table *current_settings)
+{
+	struct parm *p;
+	u32 reg;
+
+	p = &pll->n;
+	if (!(readl(pll->base + p->reg_off) & MESON_PLL_ENABLE))
+		return -EINVAL;
+
+	p = &pll->n;
+	reg = readl(pll->base + p->reg_off);
+	current_settings->n = PARM_GET(p->width, p->shift, reg);
+
+	p = &pll->m;
+	reg = readl(pll->base + p->reg_off);
+	current_settings->m = PARM_GET(p->width, p->shift, reg);
+
+	p = &pll->od;
+	reg = readl(pll->base + p->reg_off);
+	current_settings->od = PARM_GET(p->width, p->shift, reg);
+
+	p = &pll->od2;
+	reg = readl(pll->base + p->reg_off);
+	current_settings->od2 = PARM_GET(p->width, p->shift, reg);
+
+	p = &pll->frac;
+	reg = readl(pll->base + p->reg_off);
+	current_settings->frac = PARM_GET(p->width, p->shift, reg);
+
+	/*
+	 * Sign extend if required
+	 */
+	if (current_settings->frac & (1 << 14))
+		current_settings->frac |= (1 << 15);
+
+	return 0;
+}
+
+static int meson_axg_frac_pll_set_rate(struct clk_hw *hw, unsigned long rate, unsigned long parent_rate)
+{
+	struct meson_clk_pll *pll = to_meson_clk_pll(hw);
+	const struct pll_rate_table *rate_entry;
+	struct pll_rate_table current_settings;
+	bool reset = false;
+	int ret;
+	s16 frac;
+	u32 reg;
+
+	rate_entry = get_closest_rate_entry(pll, rate);
+	frac = rate_entry->frac;
+
+	frac = calc_frac(rate, parent_rate, rate_entry->m, rate_entry->n, rate_entry->od, rate_entry->od2);
+	if (frac <= -16128 && frac >= 16128) {
+		pr_warn("%s: PLL frac value outside of safe range, probably a rate_table entry is missing\n", __func__);
+		frac = rate_entry->frac;
+	}
+
+	ret = meson_axg_frac_pll_get_current_settings(pll, &current_settings);
+	/* PLL is not running or in a strange state, force a reset */
+	if (ret < 0)
+		reset = true;
+
+	/*
+	 * If a reset is not required and we only changed the frac part, we can just update it
+	 * without doing any resets, etc.
+	 */
+	if (!reset && current_settings.m == rate_entry->m && current_settings.n == rate_entry->n &&
+		current_settings.od == rate_entry->od && current_settings.od2 == rate_entry->od2) {
+		struct parm *p;
+
+		/* If the fractional part is the same as well, we just do nothing */
+		if (current_settings.frac == (u16)frac)
+			return 0;
+
+		p = &pll->frac;
+		reg = readl(pll->base + p->reg_off);
+		reg = PARM_SET(p->width, p->shift, reg, (u16)frac);
+		writel(reg, pll->base + p->reg_off);
+
+		return 0;
+	} else {
+		/* m, n, od, or od2 might have changed, we need to re-initialize the PLL */
+		struct parm *p;
+
+		pr_info("%s: re-initializing the PLL\n", __func__);
+
+		meson_axg_pll_load_default(hw, false);
+
+		/* Load the new configuration */
+		p = &pll->n;
+		reg = readl(pll->base + p->reg_off);
+		reg = PARM_SET(p->width, p->shift, reg, rate_entry->n);
+		writel(reg, pll->base + p->reg_off);
+
+		p = &pll->m;
+		reg = readl(pll->base + p->reg_off);
+		reg = PARM_SET(p->width, p->shift, reg, rate_entry->m);
+		writel(reg, pll->base + p->reg_off);
+
+		p = &pll->od;
+		reg = readl(pll->base + p->reg_off);
+		reg = PARM_SET(p->width, p->shift, reg, rate_entry->od);
+		writel(reg, pll->base + p->reg_off);
+
+		p = &pll->od2;
+		reg = readl(pll->base + p->reg_off);
+		reg = PARM_SET(p->width, p->shift, reg, rate_entry->od2);
+		writel(reg, pll->base + p->reg_off);
+
+		p = &pll->frac;
+		reg = readl(pll->base + p->reg_off);
+		reg = PARM_SET(p->width, p->shift, reg, (u16)frac);
+		writel(reg, pll->base + p->reg_off);
+
+
+		/* Perform the reset and set enable bit */
+		p = &pll->n;
+		reg = readl(pll->base + p->reg_off);
+		reg |= MESON_PLL_RESET | MESON_PLL_ENABLE;
+		writel(reg, pll->base + p->reg_off);
+		udelay(10);
+		writel(reg & (~MESON_PLL_RESET), pll->base + p->reg_off);
+
+		ret = meson_axg_pll_wait_lock(pll, p);
+		if (ret) {
+			pr_err("%s: failed to lock the PLL\n", __func__);
+			return ret;
+		}
+	}
+
+	return 0;
 }
 
 static int meson_axg_pll_enable(struct clk_hw *hw)
@@ -365,6 +620,14 @@ const struct clk_ops meson_axg_pll_ops = {
 	.recalc_rate	= meson_axg_pll_recalc_rate,
 	.round_rate	= meson_axg_pll_round_rate,
 	.set_rate	= meson_axg_pll_set_rate,
+	.enable		= meson_axg_pll_enable,
+	.disable	= meson_axg_pll_disable,
+};
+
+const struct clk_ops meson_axg_frac_pll_ops = {
+	.recalc_rate	= meson_axg_frac_pll_recalc_rate,
+	.round_rate	= meson_axg_frac_pll_round_rate,
+	.set_rate	= meson_axg_frac_pll_set_rate,
 	.enable		= meson_axg_pll_enable,
 	.disable	= meson_axg_pll_disable,
 };

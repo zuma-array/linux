@@ -211,6 +211,7 @@ extern const struct clk_ops meson_clk_mpll_ops;
 extern const struct clk_ops meson_clk_mux_ops;
 extern const struct clk_ops meson_axg_pll_ro_ops;
 extern const struct clk_ops meson_axg_pll_ops;
+extern const struct clk_ops meson_axg_frac_pll_ops;
 
 extern void meson_clk_register_composite(struct clk **soc_clks,
 			struct meson_composite *composite,
