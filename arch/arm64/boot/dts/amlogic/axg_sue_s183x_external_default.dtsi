@@ -179,6 +179,13 @@
 		pinctrl-names = "tdm_pins";
 		pinctrl-0 = <&tdmc_mclk_pins &tdmout_c_pins &tdmin_c_pins>;
 		status = "okay";
+
+		/*
+		 * Only enable the drift compensator for the TDM-C interface.
+		 * We do not want one for the TDM-B interface because in our
+		 * case both would control the same PLL.
+		 */
+		enable-drift-compensator;
 	};
 
 	aml_spdif: spdif {
