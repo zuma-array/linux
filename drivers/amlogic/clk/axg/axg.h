@@ -30,6 +30,7 @@
 #define HHI_GP0_PLL_CNTL		0x40 /* 0x10 offset in data sheet */
 
 #define HHI_HIFI_PLL_CNTL		0x80 /* 0x20 offset in data sheet */
+#define HHI_HIFI_PLL_CNTL5		0x90 /* 0x24 offset in data sheet */
 
 #define HHI_PCIE_PLL_CNTL		0xd8 /* 0x36 offset in data sheet */
 #define HHI_PCIE_PLL_CNTL1		0xdc /* 0x37 offset in data sheet */
@@ -270,6 +271,17 @@ static const struct pll_rate_table axg_gp0_pll_rate_table[] = {
 	PLL_RATE(1584000000, 66, 1, 0),
 	PLL_RATE(1608000000, 67, 1, 0),
 	PLL_RATE(1632000000, 68, 1, 0),
+	{ /* sentinel */ },
+};
+
+/*
+ * These PLL rates are 20 times the MCLK (for 44.1 kHz and 48 kHz). They
+ * are not exact (but close enough), the calculations for those values
+ * were done in a spreasheed called `HiFi-PLL-Calculation.ods`.
+ */
+static const struct pll_rate_table axg_hifi_pll_rate_table[] = {
+	PLL_FRAC_RATE(451584045, 301, 4, 2, 0, 0x01CB),		/* For 22.5792 MHz MCLK */
+	PLL_FRAC_RATE(491520080, 328, 4, 2, 0, 0xF5C3),		/* For 24.576 MHz MCLK */
 	{ /* sentinel */ },
 };
 
