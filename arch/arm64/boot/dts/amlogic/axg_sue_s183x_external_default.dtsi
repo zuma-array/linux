@@ -160,7 +160,7 @@
 		dai-tdm-lane-slot-mask-in = <1>;
 		dai-tdm-clk-sel = <1>;
 		clocks = <&clkaudio CLKID_AUDIO_MCLK_B
-				&clkc CLKID_MPLL2>;
+				&clkc CLKID_HIFI_PLL>;
 		clock-names = "mclk", "clk_srcpll";
 		pinctrl-names = "tdm_pins";
 		pinctrl-0 = <&tdmin_b_pins>;
@@ -174,7 +174,7 @@
 		dai-tdm-lane-slot-mask-in = <0 1>;
 		dai-tdm-clk-sel = <2>;
 		clocks = <&clkaudio CLKID_AUDIO_MCLK_C
-				&clkc CLKID_MPLL2>;
+				&clkc CLKID_HIFI_PLL>;
 		clock-names = "mclk", "clk_srcpll";
 		pinctrl-names = "tdm_pins";
 		pinctrl-0 = <&tdmc_mclk_pins &tdmout_c_pins &tdmin_c_pins>;
