@@ -330,6 +330,15 @@ unsigned int aml_mpll_mclk_ratio(unsigned int freq)
 	return ratio;
 }
 
+unsigned int aml_hifipll_mclk_ratio(unsigned int freq)
+{
+	/*
+	 * All the rate entries in the HiFi PLL table are
+	 * optimally calculated for an ratio of 20.
+	 */
+	return 20;
+}
+
 static const struct of_device_id amlogic_audio_clocks_of_match[] = {
 	{ .compatible = "amlogic, audio_clocks" },
 	{},
