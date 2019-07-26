@@ -84,6 +84,8 @@ struct aml_tdm {
 	struct frddr *fddr;
 	s32 drift_comp_value;
 	u32 sysclk_nominal;
+
+	bool enable_drift_compensator;
 };
 
 static const struct snd_pcm_hardware aml_tdm_hardware = {
@@ -782,7 +784,14 @@ static int aml_dai_tdm_probe(struct snd_soc_dai *cpu_dai)
 	/* config ddr arb */
 	aml_tdm_arb_config(p_tdm->actrl);
 
-	if (p_tdm->id < ARRAY_SIZE(tdm_controls))
+	/*
+	 * Only add the drift compensator control if it was exlicitly requested
+	 * for the TDM interface. The reason that we do not want to have this
+	 * control on all interfaces since it could happen that two or more interfaces
+	 * might share the same parent clock, so multiple dirft compensators would
+	 * be controlling the same PLL.
+	 */
+	if (p_tdm->enable_drift_compensator && p_tdm->id < ARRAY_SIZE(tdm_controls))
 		snd_soc_add_dai_controls(cpu_dai, tdm_controls[p_tdm->id],
 				ARRAY_SIZE(tdm_controls[p_tdm->id]));
 
@@ -945,6 +954,8 @@ static int aml_tdm_platform_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Can't retrieve mpll2 clock\n");
 		return PTR_ERR(p_tdm->clk);
 	}
+
+	p_tdm->enable_drift_compensator = of_property_read_bool(node, "enable-drift-compensator");
 
 	p_tdm->mclk = devm_clk_get(&pdev->dev, "mclk");
 	if (IS_ERR(p_tdm->mclk)) {
