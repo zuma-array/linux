@@ -29,9 +29,13 @@
 #include <sound/jack.h>
 #include <sound/soc.h>
 #include <sound/soc-dai.h>
-#include "../../../../drivers/gpio/gpiolib.h"
-#include "card.h"
 #include <linux/clk-provider.h>
+
+#include "../../../../drivers/gpio/gpiolib.h"
+
+#include "card.h"
+#include "clocks.h"
+
 struct aml_jack {
 	struct snd_soc_jack jack;
 	struct snd_soc_jack_pin pin;
@@ -437,28 +441,29 @@ static int aml_card_hw_params(struct snd_pcm_substream *substream,
 	else if (dai_props->mclk_fs)
 		mclk_fs = dai_props->mclk_fs;
 
-	if (mclk_fs) {
+	if (mclk_fs)
 		mclk = params_rate(params) * mclk_fs;
+	else
+		mclk = aml_get_mclk_rate(params_rate(params));
 
-		for (i = 0; i < rtd->num_codecs; i++) {
-			codec_dai = rtd->codec_dais[i];
+	for (i = 0; i < rtd->num_codecs; i++) {
+		codec_dai = rtd->codec_dais[i];
 
-			ret = snd_soc_dai_set_sysclk(codec_dai, 0, mclk,
-				clk_dir);
+		ret = snd_soc_dai_set_sysclk(codec_dai, 0, mclk,
+			clk_dir);
 
-			if (ret && ret != -ENOTSUPP)
-				goto err;
-		}
-
-		ret = snd_soc_dai_set_sysclk(cpu_dai, 0, mclk,
-					     clk_dir);
-		if (ret && ret != -ENOTSUPP)
-			goto err;
-
-		ret = snd_soc_dai_set_fmt(cpu_dai, dai_link->dai_fmt);
 		if (ret && ret != -ENOTSUPP)
 			goto err;
 	}
+
+	ret = snd_soc_dai_set_sysclk(cpu_dai, 0, mclk,
+				     clk_dir);
+	if (ret && ret != -ENOTSUPP)
+		goto err;
+
+	ret = snd_soc_dai_set_fmt(cpu_dai, dai_link->dai_fmt);
+	if (ret && ret != -ENOTSUPP)
+		goto err;
 
 	if (loopback_is_enable() && mclk)
 		loopback_hw_params(substream, params, &priv->lb_cfg, mclk);
