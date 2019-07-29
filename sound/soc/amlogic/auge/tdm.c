@@ -46,9 +46,6 @@
 #define TDM_C	2
 #define LANE_MAX 4
 
-#define MCLK_48k	(24576000UL)
-#define MCLK_44k1	(22579200UL)
-
 static void dump_pcm_setting(struct pcm_setting *setting)
 {
 	if (setting == NULL)
@@ -488,8 +485,15 @@ static int pcm_setting_init(struct pcm_setting *setting, unsigned int rate,
 		setting->sysclk_bclk_ratio = 2;
 		setting->sysclk = setting->sysclk_bclk_ratio * setting->bclk;
 	} else {
-		/* Always use one of the main MCLK rates and calculate ratio */
-		setting->sysclk = ((rate % 8000) == 0) ? MCLK_48k : MCLK_44k1;
+		/*
+		 * At this point the sysclk should already have been set by the card driver,
+		 * if this is not the case, print a warning and calculate it.
+		 */
+		if (setting->sysclk == 0) {
+			pr_warn("%s: no sysclk was set by the card driver\n", __func__);
+			setting->sysclk = aml_get_mclk_rate(rate);
+		}
+
 		setting->sysclk_bclk_ratio = setting->sysclk / setting->bclk;
 	}
 

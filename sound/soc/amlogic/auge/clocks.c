@@ -339,6 +339,14 @@ unsigned int aml_hifipll_mclk_ratio(unsigned int freq)
 	return 20;
 }
 
+#define MCLK_48k	(24576000UL)
+#define MCLK_44k1	(22579200UL)
+
+unsigned int aml_get_mclk_rate(unsigned int rate)
+{
+	return ((rate % 8000) == 0) ? MCLK_48k : MCLK_44k1;
+}
+
 static const struct of_device_id amlogic_audio_clocks_of_match[] = {
 	{ .compatible = "amlogic, audio_clocks" },
 	{},
