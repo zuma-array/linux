@@ -505,6 +505,7 @@ static struct snd_soc_ops aml_card_ops = {
 static int aml_card_dai_init(struct snd_soc_pcm_runtime *rtd)
 {
 	struct aml_card_data *priv = snd_soc_card_get_drvdata(rtd->card);
+	struct device *dev = aml_priv_to_dev(priv);
 	struct snd_soc_dai *codec = rtd->codec_dai;
 	struct snd_soc_dai *cpu = rtd->cpu_dai;
 	struct aml_dai_props *dai_props =
@@ -533,10 +534,19 @@ static int aml_card_dai_init(struct snd_soc_pcm_runtime *rtd)
 	/* enable dai-link mclk when CONTINUOUS clk setted */
 	idle_clk = !!(rtd->dai_link->dai_fmt & SND_SOC_DAIFMT_CONT);
 	if (idle_clk && dai_props->cpu_dai.clk) {
-		clk_set_rate(dai_props->cpu_dai.clk, dai_props->cpu_dai.sysclk);
-		ret = clk_prepare_enable(dai_props->cpu_dai.clk);
-		if (ret)
-			return ret;
+		ret = clk_set_rate(dai_props->cpu_dai.clk, dai_props->cpu_dai.sysclk);
+
+		/*
+		 * Always set the BCLK to MCLK/8 and the WCLK to BCLK/64 for the
+		 * early clocks.
+		 */
+		ret |= snd_soc_dai_set_clkdiv(cpu, 0, 8);
+		ret |= snd_soc_dai_set_bclk_ratio(cpu, 64);
+
+		ret |= clk_prepare_enable(dai_props->cpu_dai.clk);
+
+		if (ret != 0)
+			dev_err(dev, "enabling of continuous clocks failed\n");
 	}
 
 	return 0;
