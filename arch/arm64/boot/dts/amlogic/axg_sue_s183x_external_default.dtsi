@@ -79,7 +79,6 @@
 
 		aml-audio-card,dai-link@1 {
 			format = "i2s";
-			mclk-fs = <256>;
 			bitclock-master = <&aml_tdmb>;
 			frame-master = <&aml_tdmb>;
 			cpu {
@@ -88,7 +87,15 @@
 				dai-tdm-slot-rx-mask = <1 1>;
 				dai-tdm-slot-num = <2>;
 				dai-tdm-slot-width = <32>;
-				system-clock-frequency = <12288000>;
+
+				/*
+				 * This is the initial MCLK rate on boot.
+				 *
+				 * NOTE: Since both the TDM-B and the TDM-C are generally running
+				 * from the same MCLK, make sure the these entries for the TDM-B
+				 * and TDM-C links match.
+				 */
+				system-clock-frequency = <24576000>;
 			};
 			codec {
 				sound-dai = <&dummy_codec>;
@@ -97,7 +104,6 @@
 
 		aml-audio-card,dai-link@2 {
 			format = "i2s";
-			mclk-fs = <512>;
 			continuous-clock;
 			bitclock-master = <&aml_tdmc>;
 			frame-master = <&aml_tdmc>;
