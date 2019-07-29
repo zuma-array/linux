@@ -662,13 +662,24 @@ static int aml_dai_set_bclk_ratio(struct snd_soc_dai *cpu_dai,
 {
 	struct aml_tdm *p_tdm = snd_soc_dai_get_drvdata(cpu_dai);
 	unsigned int bclk_ratio, lrclk_hi;
+	unsigned int pcm_mode = p_tdm->setting.pcm_mode;
 
 	p_tdm->setting.bclk_lrclk_ratio = ratio;
 	bclk_ratio = ratio - 1;
 	lrclk_hi = 0;
 
-	if (p_tdm->setting.pcm_mode == SND_SOC_DAIFMT_I2S ||
-		p_tdm->setting.pcm_mode == SND_SOC_DAIFMT_LEFT_J) {
+	/*
+	 * We need this default fallback in the case where we want to setup
+	 * the WCLK and BCLK before anything ASoC related is set-up. The use
+	 * case for this is the enabling of all I2S clocks early in the boot.
+	 */
+	if (pcm_mode == 0) {
+		pr_info("%s: pcm_mode unset, falling back to I2S\n", __func__);
+		pcm_mode = SND_SOC_DAIFMT_I2S;
+	}
+
+	if (pcm_mode == SND_SOC_DAIFMT_I2S ||
+		pcm_mode == SND_SOC_DAIFMT_LEFT_J) {
 		pr_info("aml_dai_set_bclk_ratio, select I2S mode\n");
 		lrclk_hi = bclk_ratio / 2;
 	} else {
