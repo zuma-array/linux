@@ -29,8 +29,6 @@
 #include <linux/of_device.h>
 #include <linux/acpi.h>
 
-#define AXP20X_OFF	0x80
-
 static const char * const axp20x_model_names[] = {
 	"AXP152",
 	"AXP202",
@@ -742,19 +740,6 @@ static struct mfd_cell axp809_cells[] = {
 	},
 };
 
-static struct axp20x_dev *axp20x_pm_power_off;
-static void axp20x_power_off(void)
-{
-	if (axp20x_pm_power_off->variant == AXP288_ID)
-		return;
-
-	regmap_write(axp20x_pm_power_off->regmap, AXP20X_OFF_CTRL,
-		     AXP20X_OFF);
-
-	/* Give capacitors etc. time to drain to avoid kernel panic msg. */
-	msleep(500);
-}
-
 int axp20x_match_device(struct axp20x_dev *axp20x)
 {
 	struct device *dev = axp20x->dev;
@@ -855,11 +840,6 @@ int axp20x_device_probe(struct axp20x_dev *axp20x)
 		return ret;
 	}
 
-	if (!pm_power_off) {
-		axp20x_pm_power_off = axp20x;
-		pm_power_off = axp20x_power_off;
-	}
-
 	dev_info(axp20x->dev, "AXP20X driver loaded\n");
 
 	return 0;
@@ -868,11 +848,6 @@ EXPORT_SYMBOL(axp20x_device_probe);
 
 int axp20x_device_remove(struct axp20x_dev *axp20x)
 {
-	if (axp20x == axp20x_pm_power_off && pm_power_off == axp20x_power_off) {
-		axp20x_pm_power_off = NULL;
-		pm_power_off = NULL;
-	}
-
 	mfd_remove_devices(axp20x->dev);
 
 	if (axp20x->irq != -1)
