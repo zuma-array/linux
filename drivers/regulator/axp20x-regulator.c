@@ -25,6 +25,8 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 
+#define AXP20X_OFF	0x80
+
 #define AXP20X_IO_ENABLED		0x03
 #define AXP20X_IO_DISABLED		0x07
 
@@ -583,6 +585,18 @@ static bool axp20x_is_polyphase_slave(struct axp20x_dev *axp20x, int id)
 	return false;
 }
 
+static struct axp20x_dev *axp20x_pm_power_off;
+static void axp20x_power_off(void)
+{
+	if (axp20x_pm_power_off->variant == AXP288_ID)
+		return;
+
+	regmap_write(axp20x_pm_power_off->regmap, AXP20X_OFF_CTRL, AXP20X_OFF);
+
+	/* Give capacitors etc. time to drain to avoid kernel panic msg. */
+	msleep(500);
+}
+
 struct axp20x_pdata {
 	int nregulators;
 	struct regulator_dev **regs;
@@ -730,8 +744,27 @@ static int axp20x_regulator_probe(struct platform_device *pdev)
 		}
 	}
 
+	if (!pm_power_off) {
+		dev_err(&pdev->dev, "registered power off handler\n");
+		axp20x_pm_power_off = axp20x;
+		pm_power_off = axp20x_power_off;
+	}
+
 	return 0;
 }
+
+static int axp20x_regulator_remove(struct platform_device *pdev)
+{
+	struct axp20x_dev *axp20x = dev_get_drvdata(pdev->dev.parent);
+
+	if (axp20x == axp20x_pm_power_off && pm_power_off == axp20x_power_off) {
+		axp20x_pm_power_off = NULL;
+		pm_power_off = NULL;
+	}
+
+	return 0;
+}
+
 
 #ifdef CONFIG_PM_SLEEP
 static int axp20x_suspend(struct device *dev)
@@ -787,6 +820,7 @@ static const struct dev_pm_ops axp20x_pm_ops = {
 
 static struct platform_driver axp20x_regulator_driver = {
 	.probe	= axp20x_regulator_probe,
+	.remove = axp20x_regulator_remove,
 	.driver	= {
 		.name		= "axp20x-regulator",
 #ifdef CONFIG_PM_SLEEP
