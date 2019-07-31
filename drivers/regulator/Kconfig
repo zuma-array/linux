@@ -983,5 +983,13 @@ config REGULATOR_BD71837
     help
       This driver supports BD71837 voltage regulator chips.
 
+config REGULATOR_AXP15060
+	tristate "X-POWERS AXP15060 PMIC Regulators"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  This driver provides support for the voltage regulators on the
+	  AXP15060 PMIC.
+
 endif
 
