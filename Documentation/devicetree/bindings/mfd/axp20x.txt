@@ -49,6 +49,11 @@ Optional properties for DCDC regulators:
 			  probably makes sense for HiFi audio related
 			  applications that aren't battery constrained.
 
+- x-powers,disable-before-poweroff: Make sure to turn-off/disable this regulator before
+				    completely powering off the AXP. This can be required
+				    since not all regulators are automatically turned off
+				    when powering down the AXP.
+
 AXP202/AXP209 regulators, type, and corresponding input supply names:
 
 Regulator	  Type		  Supply Name		  Notes

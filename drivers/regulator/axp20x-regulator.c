@@ -585,22 +585,32 @@ static bool axp20x_is_polyphase_slave(struct axp20x_dev *axp20x, int id)
 	return false;
 }
 
-static struct axp20x_dev *axp20x_pm_power_off;
+struct axp20x_pdata {
+	int nregulators;
+	struct regulator_dev **regs;
+	bool *disable_before_poweroff;
+};
+
+static struct axp20x_pdata *axp20x_pdata_pm_power_off;
 static void axp20x_power_off(void)
 {
-	if (axp20x_pm_power_off->variant == AXP288_ID)
+	int i;
+	struct axp20x_pdata *pdata = axp20x_pdata_pm_power_off;
+	struct axp20x_dev *axp20x = rdev_get_drvdata(pdata->regs[0]);
+
+	if (axp20x->variant == AXP288_ID)
 		return;
 
-	regmap_write(axp20x_pm_power_off->regmap, AXP20X_OFF_CTRL, AXP20X_OFF);
+	for (i = 0; i < pdata->nregulators; i++) {
+		if (pdata->disable_before_poweroff[i])
+			regulator_disable_regmap(pdata->regs[i]);
+	}
+
+	regmap_write(axp20x->regmap, AXP20X_OFF_CTRL, AXP20X_OFF);
 
 	/* Give capacitors etc. time to drain to avoid kernel panic msg. */
 	msleep(500);
 }
-
-struct axp20x_pdata {
-	int nregulators;
-	struct regulator_dev **regs;
-};
 
 static int axp20x_regulator_probe(struct platform_device *pdev)
 {
@@ -656,6 +666,7 @@ static int axp20x_regulator_probe(struct platform_device *pdev)
 	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
 	pdata->nregulators = nregulators;
 	pdata->regs = devm_kzalloc(&pdev->dev, sizeof(*pdata->regs) * nregulators, GFP_KERNEL);
+	pdata->disable_before_poweroff = devm_kzalloc(&pdev->dev, sizeof(*pdata->disable_before_poweroff) * nregulators, GFP_KERNEL);
 	dev_set_drvdata(&pdev->dev, pdata);
 
 	for (i = 0; i < nregulators; i++) {
@@ -715,6 +726,8 @@ static int axp20x_regulator_probe(struct platform_device *pdev)
 					rdev->desc->name);
 		}
 
+		pdata->disable_before_poweroff[i] = of_property_read_bool(rdev->dev.of_node, "x-powers,disable-before-poweroff");
+
 		/*
 		 * Save AXP22X DCDC1 / DCDC5 regulator names for later.
 		 */
@@ -746,7 +759,7 @@ static int axp20x_regulator_probe(struct platform_device *pdev)
 
 	if (!pm_power_off) {
 		dev_err(&pdev->dev, "registered power off handler\n");
-		axp20x_pm_power_off = axp20x;
+		axp20x_pdata_pm_power_off = pdata;
 		pm_power_off = axp20x_power_off;
 	}
 
@@ -755,10 +768,8 @@ static int axp20x_regulator_probe(struct platform_device *pdev)
 
 static int axp20x_regulator_remove(struct platform_device *pdev)
 {
-	struct axp20x_dev *axp20x = dev_get_drvdata(pdev->dev.parent);
-
-	if (axp20x == axp20x_pm_power_off && pm_power_off == axp20x_power_off) {
-		axp20x_pm_power_off = NULL;
+	if (pm_power_off == axp20x_power_off) {
+		axp20x_pdata_pm_power_off = NULL;
 		pm_power_off = NULL;
 	}
 
