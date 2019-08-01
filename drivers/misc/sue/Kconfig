@@ -1,4 +1,5 @@
 config SUE_HWCOUNTER_MX7
 	depends on SOC_IMX7
+	select UIO
 	tristate "StreamUnlimited hardware counter for imx7"
 	default n

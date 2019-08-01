@@ -6,6 +6,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
+#include <linux/uio_driver.h>
 
 #include <misc/hwcounter-mx7.h>
 
@@ -24,6 +25,8 @@
 
 #define MXC_GPT_CR_CLKSRC_PER	(1 << 6)
 #define MXC_GPT_CR_CLKSRC_CLKIN	(3 << 6)
+
+#define DRIVER_NAME "sue_hwcounter"
 
 
 inline u32 hwcounter_get_value(struct hwcounter_data *hwcounter)
@@ -67,17 +70,49 @@ static int hwcounter_probe(struct platform_device *pdev)
 	struct hwcounter_data *pdata;
 	int ret;
 	u32 reg;
+	struct resource res;
+	struct uio_info *uio;
 
 	pdata = devm_kzalloc(dev, sizeof(struct hwcounter_data), GFP_KERNEL);
 	if (!pdata)
 		return -ENOMEM;
 
-	pdata->timer_base = of_iomap(dev->of_node, 0);
+	uio = devm_kzalloc(dev, sizeof(struct uio_info), GFP_KERNEL);
+	if (!uio)
+		return -ENOMEM;
+
+	/*
+	 * This is essentially what of_iomap() does but we also want to extract the
+	 * resource info as well since we will need the physical address for uio.
+	 */
+	ret = of_address_to_resource(dev->of_node, 0, &res);
+	if (ret)
+		return ret;
+
+	pdata->timer_base = ioremap(res.start, resource_size(&res));
 	if (!pdata->timer_base) {
-		dev_err(dev, "failed of_iomap() call\n");
+		dev_err(dev, "failed ioremap() call\n");
 		return -ENXIO;
 	}
 	dev_info(dev, "timer_base is %p\n", pdata->timer_base);
+
+
+	/*
+	 * Register the UIO device early since the uio_register_device()
+	 * call might return EPROBE_DEFER.
+	 */
+	pdata->uio = uio;
+	uio->name = DRIVER_NAME;
+	uio->version = "0.1";
+
+	uio->mem[0].name = "timer_regs";
+	uio->mem[0].addr = res.start;
+	uio->mem[0].size = 4096;
+	uio->mem[0].memtype = UIO_MEM_PHYS;
+
+	ret = uio_register_device(dev, uio);
+	if (ret)
+		return ret;
 
 	pdata->clk_per = of_clk_get_by_name(dev->of_node, "per");
 	if (IS_ERR(pdata->clk_per)) {
@@ -150,7 +185,8 @@ static int hwcounter_remove(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct hwcounter_data *pdata = (struct hwcounter_data *)dev_get_drvdata(dev);
 
-	dev_warn(dev, "Unloading module, do not access the value register throught /dev/mem anymore or your system will hang\n");
+	uio_unregister_device(pdata->uio);
+
 	device_remove_file(dev, &dev_attr_value);
 
 	/* Set configuration to 0, thus disabling the counter */
@@ -176,7 +212,7 @@ static struct platform_driver hwcounter_driver = {
 	.probe		= hwcounter_probe,
 	.remove		= hwcounter_remove,
 	.driver		= {
-		.name	= "sue_hwcounter",
+		.name	= DRIVER_NAME,
 		.owner	= THIS_MODULE,
 		.of_match_table	= of_match_ptr(hwcounter_dt_ids),
 	},
