@@ -3,8 +3,6 @@
  *
  * Copyright (c) 2015 Pengutronix, Philipp Zabel <p.zabel@pengutronix.de>
  *
- * Copyright 2017 NXP
- *
  * Based on the barebox ocotp driver,
  * Copyright (c) 2010 Baruch Siach <baruch@tkos.co.il>,
  *	Orex Computed Radiography
@@ -116,29 +114,22 @@ static int imx_ocotp_read(void *context, unsigned int offset,
 {
 	struct ocotp_priv *priv = context;
 	unsigned int count;
-	u8 *buf, *p;
+	u32 *buf = val;
 	int i, ret;
-	u32 index, num_bytes;
+	u32 index;
 
 	index = offset >> 2;
-	num_bytes = round_up((offset % 4) + bytes, 4);
-	count = num_bytes >> 2;
+	count = bytes >> 2;
 
 	if (count > (priv->nregs - index))
 		count = priv->nregs - index;
 
 	mutex_lock(&ocotp_mutex);
 
-	p = kzalloc(num_bytes, GFP_KERNEL);
-	if (!p)
-		return -ENOMEM;
-	buf = p;
-
 	ret = clk_prepare_enable(priv->clk);
 	if (ret < 0) {
 		mutex_unlock(&ocotp_mutex);
 		dev_err(priv->dev, "failed to prepare/enable ocotp clk\n");
-		kfree(p);
 		return ret;
 	}
 
@@ -149,7 +140,7 @@ static int imx_ocotp_read(void *context, unsigned int offset,
 	}
 
 	for (i = index; i < (index + count); i++) {
-		*(u32 *)buf = readl(priv->base + IMX_OCOTP_OFFSET_B0W0 +
+		*buf++ = readl(priv->base + IMX_OCOTP_OFFSET_B0W0 +
 			       i * IMX_OCOTP_OFFSET_PER_WORD);
 
 		/* 47.3.1.2
@@ -158,22 +149,14 @@ static int imx_ocotp_read(void *context, unsigned int offset,
 		 * software before any new write, read or reload access can be
 		 * issued
 		 */
-		if (*((u32*)buf) == IMX_OCOTP_READ_LOCKED_VAL)
+		if (*(buf - 1) == IMX_OCOTP_READ_LOCKED_VAL)
 			imx_ocotp_clr_err_if_set(priv->base);
-
-		buf += 4;
 	}
 	ret = 0;
-
-	index = offset % 4;
-	memcpy(val, &p[index], bytes);
 
 read_end:
 	clk_disable_unprepare(priv->clk);
 	mutex_unlock(&ocotp_mutex);
-
-	kfree(p);
-
 	return ret;
 }
 
@@ -319,7 +302,7 @@ static struct nvmem_config imx_ocotp_nvmem_config = {
 	.name = "imx-ocotp",
 	.read_only = false,
 	.word_size = 4,
-	.stride = 1,
+	.stride = 4,
 	.owner = THIS_MODULE,
 	.reg_read = imx_ocotp_read,
 	.reg_write = imx_ocotp_write,
@@ -331,7 +314,6 @@ static const struct of_device_id imx_ocotp_dt_ids[] = {
 	{ .compatible = "fsl,imx6sx-ocotp", (void *)128 },
 	{ .compatible = "fsl,imx6ul-ocotp", (void *)128 },
 	{ .compatible = "fsl,imx7d-ocotp", (void *)64 },
-	{ .compatible = "fsl,imx8mq-ocotp", (void *)256 },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, imx_ocotp_dt_ids);
@@ -361,7 +343,6 @@ static int imx_ocotp_probe(struct platform_device *pdev)
 
 	of_id = of_match_device(imx_ocotp_dt_ids, dev);
 	priv->nregs = (unsigned long)of_id->data;
-	priv->dev = dev;
 	imx_ocotp_nvmem_config.size = 4 * priv->nregs;
 	imx_ocotp_nvmem_config.dev = dev;
 	imx_ocotp_nvmem_config.priv = priv;
