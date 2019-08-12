@@ -188,6 +188,11 @@ struct clk *imx_clk_fixup_mux(const char *name, void __iomem *reg,
 			      u8 shift, u8 width, const char * const *parents,
 			      int num_parents, void (*fixup)(u32 *val));
 
+struct clk *imx_clk_register_lazy_divider(struct device *dev, const char *name,
+		const char *parent_name, unsigned long flags,
+		void __iomem *reg, u8 shift, u8 width,
+		u16 clk_divider_flags, spinlock_t *lock);
+
 static inline struct clk *imx_clk_fixed(const char *name, int rate)
 {
 	return clk_register_fixed_rate(NULL, name, NULL, 0, rate);
@@ -231,6 +236,14 @@ static inline struct clk *imx_clk_divider_flags(const char *name,
 {
 	return clk_register_divider(NULL, name, parent, flags,
 			reg, shift, width, 0, &imx_ccm_lock);
+}
+
+static inline struct clk *imx_clk_lazy_divider(const char *name, const char *parent,
+		void __iomem *reg, u8 shift, u8 width)
+{
+	return imx_clk_register_lazy_divider(NULL, name, parent,
+			CLK_SET_RATE_PARENT | CLK_SET_RATE_GATE | CLK_OPS_PARENT_ENABLE,
+			reg, shift, width, CLK_DIVIDER_ROUND_CLOSEST, &imx_ccm_lock);
 }
 
 static inline struct clk *imx_clk_gate(const char *name, const char *parent,
