@@ -1596,6 +1596,15 @@ static int fsl_micfil_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
+	/*
+	 * Disable DC filter as recommended by NXP to improve dynamic range.
+	 */
+	ret = regmap_write(micfil->regmap, REG_MICFIL_DC_CTRL, 0x0000FFFF);
+	if (ret < 0) {
+		dev_err(dev, "Failed to disable DC filter [%d]\n", ret);
+		return ret;
+	}
+
 	micfil->dma_params_rx.fifo_num = channels;
 	micfil->dma_params_rx.maxburst = channels * MICFIL_DMA_MAXBURST_RX;
 
