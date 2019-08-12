@@ -1682,19 +1682,26 @@ static int fsl_micfil_dai_probe(struct snd_soc_dai *cpu_dai)
 	int ret;
 	int i;
 
-	/* set qsel to medium */
+	/*
+	 * Set the default quality to VLOW0, this in conjunction with no DC filter
+	 * and an OUTGAIN setting of 2 is recommended by NXP to be able to record
+	 * at 48 kHz and have the most amount of dynamic range.
+	 */
 	ret = regmap_update_bits(micfil->regmap, REG_MICFIL_CTRL2,
-				 MICFIL_CTRL2_QSEL_MASK, MICFIL_MEDIUM_QUALITY);
+				 MICFIL_CTRL2_QSEL_MASK, MICFIL_VLOW0_QUALITY);
 	if (ret) {
 		dev_err(dev, "failed to set quality mode bits, reg 0x%X\n",
 			REG_MICFIL_CTRL2);
 		return ret;
 	}
 
-	/* set default gain to max_gain */
-	regmap_write(micfil->regmap, REG_MICFIL_OUT_CTRL, 0x77777777);
+	/*
+	 * Set the default OUTGAIN to 2, this is recommended by NXP
+	 * when using the default VLow0 quality.
+	 */
+	regmap_write(micfil->regmap, REG_MICFIL_OUT_CTRL, 0x22222222);
 	for (i = 0; i < 8; i++)
-		micfil->channel_gain[i] = 0xF;
+		micfil->channel_gain[i] = 0xA;
 
 	snd_soc_dai_init_dma_data(cpu_dai, NULL,
 				  &micfil->dma_params_rx);
