@@ -74,20 +74,44 @@ static const struct imx_int_pll_rate_table imx8mm_intpll_tbl[] = {
 	PLL_1416X_RATE(750000000U,  250, 2, 2),
 	PLL_1416X_RATE(700000000U,  350, 3, 2),
 	PLL_1416X_RATE(600000000U,  300, 3, 2),
+
+	/*
+	 * Last entry has to have .rate set to 0 so the length calculation
+	 * in `clk-intpll.c` works correctly.
+	 */
+	PLL_1416X_RATE(0, 0, 0, 0),
 };
 
 static const struct imx_int_pll_rate_table imx8mm_audiopll_tbl[] = {
 	PLL_1443X_RATE(786432000U, 262, 2, 2, 9437),
 	PLL_1443X_RATE(722534400U, 361, 3, 2, 17511),
+
+	/*
+	 * Last entry has to have .rate set to 0 so the length calculation
+	 * in `clk-intpll.c` works correctly.
+	 */
+	PLL_1443X_RATE(0, 0, 0, 0, 0),
 };
 
 static const struct imx_int_pll_rate_table imx8mm_videopll_tbl[] = {
 	PLL_1443X_RATE(650000000U, 325, 3, 2, 0),
 	PLL_1443X_RATE(594000000U, 198, 2, 2, 0),
+
+	/*
+	 * Last entry has to have .rate set to 0 so the length calculation
+	 * in `clk-intpll.c` works correctly.
+	 */
+	PLL_1443X_RATE(0, 0, 0, 0, 0),
 };
 
 static const struct imx_int_pll_rate_table imx8mm_drampll_tbl[] = {
 	PLL_1443X_RATE(650000000U, 325, 3, 2, 0),
+
+	/*
+	 * Last entry has to have .rate set to 0 so the length calculation
+	 * in `clk-intpll.c` works correctly.
+	 */
+	PLL_1443X_RATE(0, 0, 0, 0, 0),
 };
 
 static struct imx_int_pll_clk imx8mm_audio_pll __initdata = {
