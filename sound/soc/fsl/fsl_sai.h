@@ -310,6 +310,11 @@ struct fsl_sai {
 	struct sdma_audio_config audio_config[2];
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pins_state;
+
+	unsigned int dai_fmt;
+
+	bool cont_mclks_prepared;
+	bool suspended;
 };
 
 const struct attribute_group *fsl_sai_get_dev_attribute_group(bool monitor_spdif);
