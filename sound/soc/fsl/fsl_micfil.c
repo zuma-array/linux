@@ -45,6 +45,7 @@ struct fsl_micfil {
 	bool slave_mode;
 	int channel_gain[8];
 	int clk_src_id;
+	bool auto_clk;
 	int vad_sound_gain;
 	int vad_noise_gain;
 	int vad_input_gain;
@@ -178,7 +179,18 @@ static int micfil_put_clk_src(struct snd_kcontrol *kcontrol,
 	struct fsl_micfil *micfil = snd_soc_component_get_drvdata(comp);
 	int val = snd_soc_enum_item_to_val(e, item[0]);
 
-	micfil->clk_src_id = val;
+	if (val != 0) {
+		micfil->auto_clk = false;
+
+		/*
+		 * Since the mixer enum will have the Auto option as the first
+		 * entry, the PLL1 will actually have the index 1 in the mixer enum.
+		 * So we need to subtract 1 here.
+		 */
+		micfil->clk_src_id = val - 1;
+	} else {
+		micfil->auto_clk = true;
+	}
 
 	return 0;
 }
@@ -189,7 +201,10 @@ static int micfil_get_clk_src(struct snd_kcontrol *kcontrol,
 	struct snd_soc_component *comp = snd_kcontrol_chip(kcontrol);
 	struct fsl_micfil *micfil = snd_soc_component_get_drvdata(comp);
 
-	ucontrol->value.enumerated.item[0] = micfil->clk_src_id;
+	if (micfil->auto_clk)
+		ucontrol->value.enumerated.item[0] = 0;
+	else
+		ucontrol->value.enumerated.item[0] = micfil->clk_src_id + 1;
 
 	return 0;
 }
@@ -1390,7 +1405,7 @@ static int fsl_micfil_set_mclk_rate(struct fsl_micfil *micfil, int clk_id,
 		return -EINVAL;
 	}
 
-	if (micfil->clk_src_id == MICFIL_CLK_AUTO) {
+	if (micfil->auto_clk) {
 		for (i = 0; i < MICFIL_CLK_SRC_NUM; i++) {
 			clk_rate = clk_get_rate(micfil->clk_src[i]);
 			/* This is an workaround since audio_pll2 clock
@@ -1402,10 +1417,7 @@ static int fsl_micfil_set_mclk_rate(struct fsl_micfil *micfil, int clk_id,
 				npll = micfil->clk_src[i];
 		}
 	} else {
-		/* clock id is offseted by 1 since ID=0 means
-		 * auto clock selection
-		 */
-		npll = micfil->clk_src[micfil->clk_src_id - 1];
+		npll = micfil->clk_src[micfil->clk_src_id];
 	}
 
 	if (!npll) {
@@ -2225,6 +2237,8 @@ static int fsl_micfil_probe(struct platform_device *pdev)
 	micfil->clk_src[MICFIL_CLK_EXT3] = devm_clk_get(&pdev->dev, "clkext3");
 	if (IS_ERR(micfil->clk_src[MICFIL_CLK_EXT3]))
 		micfil->clk_src[MICFIL_CLK_EXT3] = NULL;
+
+	micfil->auto_clk = true;
 
 	/* init regmap */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
