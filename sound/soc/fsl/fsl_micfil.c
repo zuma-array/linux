@@ -1602,6 +1602,15 @@ static int fsl_micfil_hw_params(struct snd_pcm_substream *substream,
 		dev_err(dev, "Failed to set clock parameters [%d]\n", ret);
 		return ret;
 	}
+	
+	/*
+	 * Disable DC filter as recommended by NXP to improve dynamic range.
+	 */
+	ret = regmap_write(micfil->regmap, REG_MICFIL_DC_CTRL, 0x0000FFFF);
+	if (ret < 0) {
+		dev_err(dev, "Failed to disable DC filter [%d]\n", ret);
+		return ret;
+	}
 
 	micfil->audio_config.src_fifo_num = channels;
 	micfil->audio_config.sw_done_sel = BIT(31);
