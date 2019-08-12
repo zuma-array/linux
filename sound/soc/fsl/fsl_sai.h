@@ -283,6 +283,11 @@ struct fsl_sai {
 
 	struct fsl_sai_verid verid;
 	struct fsl_sai_param param;
+
+	unsigned int dai_fmt;
+
+	bool cont_mclks_prepared;
+	bool suspended;
 };
 
 #define TX 1
