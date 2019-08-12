@@ -82,9 +82,13 @@ static const struct imx_int_pll_rate_table imx8mm_intpll_tbl[] = {
 	PLL_1416X_RATE(0, 0, 0, 0),
 };
 
+/*
+ * Table entries were calculated using the `Audio-PLL-Calculations.ods`
+ * spreadsheet.
+ */
 static const struct imx_int_pll_rate_table imx8mm_audiopll_tbl[] = {
-	PLL_1443X_RATE(786432000U, 262, 2, 2, 9437),
-	PLL_1443X_RATE(722534400U, 361, 3, 2, 17511),
+	PLL_1443X_RATE(722534400U, 301, 5, 1, 0xE56),	/* 32 * MCLK for 44.1 kHz */
+	PLL_1443X_RATE(786432000U, 328, 5, 1, 0xAE14),	/* 32 * MCLK for 48 kHz */
 
 	/*
 	 * Last entry has to have .rate set to 0 so the length calculation
@@ -115,7 +119,7 @@ static const struct imx_int_pll_rate_table imx8mm_drampll_tbl[] = {
 };
 
 static struct imx_int_pll_clk imx8mm_audio_pll __initdata = {
-		.type = PLL_1443X,
+		.type = PLL_1443X_SKEWABLE,
 		.rate_table = imx8mm_audiopll_tbl,
 };
 
