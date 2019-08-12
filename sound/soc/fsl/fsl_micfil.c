@@ -2263,8 +2263,15 @@ static int fsl_micfil_probe(struct platform_device *pdev)
 	micfil->clk_src[MICFIL_CLK_EXT3] = devm_clk_get(&pdev->dev, "clkext3");
 	if (IS_ERR(micfil->clk_src[MICFIL_CLK_EXT3]))
 		micfil->clk_src[MICFIL_CLK_EXT3] = NULL;
-
-	micfil->auto_clk = true;
+	/*
+	 * Set the default clock to audio_pll1 (48 kHz usually), the previous
+	 * default was autodetection, however the autodetection logic inside
+	 * `fsl_micfil_set_mclk_rate` will not work if the PLL value is skewed
+	 * using the `Drift compensator`, thus we just disable the autodetection
+	 * by setting the default PLL.
+	 */
+	micfil->clk_src_id = MICFIL_AUDIO_PLL1;
+	micfil->auto_clk = false;
 
 	/* init regmap */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
