@@ -15,7 +15,8 @@
 #include "clk.h"
 
 #define GNRL_CTL	0x0
-#define DIV_CTL		0x4
+#define DIV_CTL0	0x4
+#define DIV_CTL1	0x8
 #define LOCK_STATUS	BIT(31)
 #define LOCK_SEL_MASK	BIT(29)
 #define CLKE_MASK	BIT(11)
@@ -231,7 +232,7 @@ static int clk_pll1416x_set_rate(struct clk_hw *hw, unsigned long drate,
 
 	div_val = (rate->mdiv << MDIV_SHIFT) | (rate->pdiv << PDIV_SHIFT) |
 		(rate->sdiv << SDIV_SHIFT);
-	writel_relaxed(div_val, pll->base + 0x4);
+	writel_relaxed(div_val, pll->base + DIV_CTL0);
 
 	/*
 	 * According to SPEC, t3 - t2 need to be greater than
@@ -296,8 +297,8 @@ static int clk_pll1443x_set_rate(struct clk_hw *hw, unsigned long drate,
 
 	div_val = (rate->mdiv << MDIV_SHIFT) | (rate->pdiv << PDIV_SHIFT) |
 		(rate->sdiv << SDIV_SHIFT);
-	writel_relaxed(div_val, pll->base + 0x4);
-	writel_relaxed(rate->kdiv << KDIV_SHIFT, pll->base + 0x8);
+	writel_relaxed(div_val, pll->base + DIV_CTL0);
+	writel_relaxed(rate->kdiv << KDIV_SHIFT, pll->base + DIV_CTL1);
 
 	/*
 	 * According to SPEC, t3 - t2 need to be greater than
