@@ -1180,6 +1180,36 @@ static int fsl_sai_probe(struct platform_device *pdev)
 
 	sai->pdev = pdev;
 
+#ifdef CONFIG_SUE_HWCOUNTER_MX7
+	hwcounter_node = of_parse_phandle(np, "hwcounter-node", 0);
+
+	if (hwcounter_node) {
+		/*
+		 * It might happen that the probing of the hwcounter driver is defered
+		 * so we need to defer here as well until we get it. It is considered
+		 * a failure if the `hwcounter-node` property is specified but the
+		 * device is never found.
+		 */
+
+		hwcounter_pdev = of_find_device_by_node(hwcounter_node);
+		of_node_put(hwcounter_node);
+		if (hwcounter_pdev == NULL) {
+			dev_info(&pdev->dev, "could not get platform device for hwcounter-node, deferring\n");
+			return -EPROBE_DEFER;
+		}
+
+		sai->hwcounter = platform_get_drvdata(hwcounter_pdev);
+		if (sai->hwcounter == NULL) {
+			dev_info(&pdev->dev, "could not get hwcounter data for hwcounter-node, deferring\n");
+			return -EPROBE_DEFER;
+		}
+
+	} else {
+		dev_warn(&pdev->dev, "hwcounter-node node not found, trigger will not be available for this SAI\n");
+	}
+
+#endif /* CONFIG_SUE_HWCOUNTER_MX7 */
+
 	if (of_device_is_compatible(pdev->dev.of_node, "fsl,imx6sx-sai"))
 		sai->sai_on_imx = true;
 
@@ -1313,32 +1343,8 @@ static int fsl_sai_probe(struct platform_device *pdev)
 		return ret;
 
 	device_create_file(&pdev->dev, &dev_attr_bclk_rate);
+
 #ifdef CONFIG_SUE_HWCOUNTER_MX7
-	/*
-	 * TODO: It might happen that the probe of this driver is called before the
-	 * probe of the hwcounter, in that case we would faile here, so maybe it
-	 * would make sense to defer the probe.
-	 */
-	hwcounter_node = of_parse_phandle(np, "hwcounter-node", 0);
-
-	if (hwcounter_node == NULL) {
-		dev_warn(&pdev->dev, "hwcounter-node node not found, trigger will not be available for this SAI\n");
-		goto trigger_init_end;
-	}
-
-	hwcounter_pdev = of_find_device_by_node(hwcounter_node);
-	of_node_put(hwcounter_node);
-	if (hwcounter_pdev == NULL) {
-		dev_warn(&pdev->dev, "could not get platform device for hwcounter-node, trigger will not be available\n");
-		goto trigger_init_end;
-	}
-
-	sai->hwcounter = platform_get_drvdata(hwcounter_pdev);
-	if (sai->hwcounter == NULL) {
-		dev_err(&pdev->dev, "could not get hwcounter data for hwcounter-node, trigger will not be available\n");
-		goto trigger_init_end;
-	}
-
 	/* read maximum allowed trigger latency. Default value is 250 microseconds */
 	if (of_property_read_u32(np, "max-trigger-latency", &sai->max_trigger_latency))
 		sai->max_trigger_latency = 250000;
@@ -1348,8 +1354,6 @@ static int fsl_sai_probe(struct platform_device *pdev)
 	sai->trigger_hrtimer.function = audio_trigger_start;
 
 	device_create_file(&pdev->dev, &dev_attr_trigger);
-
-trigger_init_end:
 #endif /* CONFIG_SUE_HWCOUNTER_MX7 */
 
 	return 0;
