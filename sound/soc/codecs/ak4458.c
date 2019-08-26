@@ -623,7 +623,7 @@ static void ak4458_power_off(struct ak4458_priv *ak4458)
 {
 	if (ak4458->reset_gpiod) {
 		gpiod_set_value_cansleep(ak4458->reset_gpiod, 0);
-		usleep_range(1000, 2000);
+		usleep_range(5000, 10000);
 	}
 }
 
@@ -631,7 +631,7 @@ static void ak4458_power_on(struct ak4458_priv *ak4458)
 {
 	if (ak4458->reset_gpiod) {
 		gpiod_set_value_cansleep(ak4458->reset_gpiod, 1);
-		usleep_range(1000, 2000);
+		usleep_range(5000, 10000);
 	}
 }
 
