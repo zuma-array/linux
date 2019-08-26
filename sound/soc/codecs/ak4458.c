@@ -1041,9 +1041,9 @@ static int ak4458_init_reg(struct snd_soc_codec *codec)
 
 	if (gpio_is_valid(ak4458->pdn_gpio)) {
 		gpio_set_value_cansleep(ak4458->pdn_gpio, 0);
-		usleep_range(1000, 2000);
+		usleep_range(5000, 10000);
 		gpio_set_value_cansleep(ak4458->pdn_gpio, 1);
-		usleep_range(1000, 2000);
+		usleep_range(5000, 10000);
 	}
 
 	ak4458_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
