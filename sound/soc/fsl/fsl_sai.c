@@ -856,7 +856,7 @@ static ssize_t trigger_store(struct device *dev, struct device_attribute *attr, 
 
 	return n;
 }
-DEVICE_ATTR(trigger, 0600, trigger_show, trigger_store);
+DEVICE_ATTR(trigger, 0660, trigger_show, trigger_store);
 
 #endif /* CONFIG_SUE_HWCOUNTER_MX7 */
 
@@ -874,7 +874,7 @@ static ssize_t bclk_rate_show(struct device *dev, struct device_attribute *attr,
 
 	return scnprintf(buf, PAGE_SIZE, "%u", hwcounter_rate);
 }
-DEVICE_ATTR(bclk_rate, 0400, bclk_rate_show, NULL);
+DEVICE_ATTR(bclk_rate, 0440, bclk_rate_show, NULL);
 
 static int fsl_sai_trigger(struct snd_pcm_substream *substream, int cmd,
 		struct snd_soc_dai *cpu_dai)
