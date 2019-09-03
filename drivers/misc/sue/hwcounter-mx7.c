@@ -62,7 +62,7 @@ static ssize_t value_show(struct device *dev, struct device_attribute *attr, cha
 
 	return written;
 }
-DEVICE_ATTR(value, 0400, value_show, NULL);
+DEVICE_ATTR(value, 0440, value_show, NULL);
 
 static int hwcounter_probe(struct platform_device *pdev)
 {
