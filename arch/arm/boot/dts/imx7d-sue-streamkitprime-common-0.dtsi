@@ -160,6 +160,13 @@
 	assigned-clock-parents = <&clks IMX7D_PLL_AUDIO_POST_DIV>;
 	assigned-clock-rates = <0>, <24576000>;
 	status = "okay";
+
+	/*
+	 * This property is ignored by the kernel driver, however we add it here so
+	 * so we can match with udev on `ENV{OF_TYPE}=="sue,audio-group"` to set the
+	 * group for the sysfs entries.
+	 */
+	device_type = "sue,audio-group";
 };
 
 &sai3 {
@@ -170,6 +177,13 @@
 	assigned-clock-parents = <&clks IMX7D_PLL_AUDIO_POST_DIV>;
 	assigned-clock-rates = <0>, <24576000>;
 	status = "okay";
+
+	/*
+	 * This property is ignored by the kernel driver, however we add it here so
+	 * so we can match with udev on `ENV{OF_TYPE}=="sue,audio-group"` to set the
+	 * group for the sysfs entries.
+	 */
+	device_type = "sue,audio-group";
 };
 
 &iomuxc_lpsr {

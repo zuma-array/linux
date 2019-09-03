@@ -155,6 +155,13 @@
 &gpt1 {
 	compatible = "sue,hwcounter-mx7";
 
+	/*
+	 * This property is ignored by the kernel driver, however we add it here so
+	 * so we can match with udev on `ENV{OF_TYPE}=="sue,audio-group"` to set the
+	 * group for the sysfs entries.
+	 */
+	device_type = "sue,audio-group";
+
 	status = "okay";
 
 	/*
@@ -421,6 +428,13 @@
 	hwcounter-node = <&gpt1>;
 
 	status = "okay";
+
+	/*
+	 * This property is ignored by the kernel driver, however we add it here so
+	 * so we can match with udev on `ENV{OF_TYPE}=="sue,audio-group"` to set the
+	 * group for the sysfs entries.
+	 */
+	device_type = "sue,audio-group";
 };
 
 &snvs_poweroff {
