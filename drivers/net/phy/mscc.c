@@ -58,10 +58,15 @@ enum rgmii_rx_clock_delay {
 #define LED_0_MODE_SEL_MASK		  0x000F
 #define LED_1_MODE_SEL_POS		  4
 
+#define MSCC_PHY_LED_BEHAV		  30
+#define LED_BLINK_RATE_POS		  10
+#define LED_BLINK_RATE_MASK		  0xC00
+
 #define MSCC_EXT_PAGE_ACCESS		  31
 #define MSCC_PHY_PAGE_STANDARD		  0x0000 /* Standard registers */
 #define MSCC_PHY_PAGE_EXTENDED		  0x0001 /* Extended registers */
 #define MSCC_PHY_PAGE_EXTENDED_2	  0x0002 /* Extended reg - page 2 */
+#define MSCC_PHY_PAGE_GENERALP		  0x0010 /* General Purpose registers */
 
 /* Extended Page 1 Registers */
 #define MSCC_PHY_EXT_MODE_CNTL		  19
@@ -75,6 +80,12 @@ enum rgmii_rx_clock_delay {
 #define DOWNSHIFT_CNTL_POS		  2
 
 /* Extended Page 2 Registers */
+#define MSCC_PHY_EEE_CNTL		  17
+#define LED_0_INVERT_SEL_MASK		  0x0400
+#define LED_0_INVERT_SEL_POS		  10
+#define LED_1_INVERT_SEL_MASK		  0x0800
+#define LED_1_INVERT_SEL_POS		  11
+
 #define MSCC_PHY_RGMII_CNTL		  20
 #define RGMII_RX_CLK_DELAY_MASK		  0x0070
 #define RGMII_RX_CLK_DELAY_POS		  4
@@ -89,6 +100,10 @@ enum rgmii_rx_clock_delay {
 #define MSCC_PHY_WOL_MAC_CONTROL	  27
 #define SECURE_ON_ENABLE		  0x8000
 #define SECURE_ON_PASSWD_LEN_4		  0x4000
+
+/* General Purpose Registers */
+#define MSCC_PHY_GPIO_CNTL2		  14
+#define GPIO_CNTL2_TRISTATE_POS		  9
 
 /* Microsemi PHY ID's */
 #define PHY_ID_VSC8530			  0x00070560
@@ -105,8 +120,15 @@ enum rgmii_rx_clock_delay {
 
 struct vsc8531_private {
 	int rate_magic;
+
+	bool led_drive;
+	u8 led_blink_rate;
+
 	u8 led_0_mode;
+	bool led_0_inv_pol;
+
 	u8 led_1_mode;
+	bool led_1_inv_pol;
 };
 
 #ifdef CONFIG_OF_MDIO
@@ -152,6 +174,111 @@ static int vsc85xx_led_cntl_set(struct phy_device *phydev,
 	mutex_unlock(&phydev->lock);
 
 	return rc;
+}
+
+static int vsc85xx_led_drive_set(struct phy_device *phydev, bool drive)
+{
+	int rc;
+	u16 reg;
+
+	mutex_lock(&phydev->lock);
+
+	rc = vsc85xx_phy_page_set(phydev, MSCC_PHY_PAGE_GENERALP);
+	if (rc != 0)
+		goto exit;
+
+	reg = phy_read(phydev, MSCC_PHY_GPIO_CNTL2);
+
+	if (drive)
+		reg &= ~(1 << GPIO_CNTL2_TRISTATE_POS);
+	else
+		reg |= 1 << GPIO_CNTL2_TRISTATE_POS;
+
+	rc = phy_write(phydev, MSCC_PHY_GPIO_CNTL2, reg);
+	rc |= vsc85xx_phy_page_set(phydev, MSCC_PHY_PAGE_STANDARD);
+
+exit:
+	mutex_unlock(&phydev->lock);
+	return rc;
+}
+
+static int vsc85xx_led_inv_pol_set(struct phy_device *phydev, int led_num, bool inv)
+{
+	int rc;
+	u16 reg;
+
+	mutex_lock(&phydev->lock);
+
+	rc = vsc85xx_phy_page_set(phydev, MSCC_PHY_PAGE_EXTENDED_2);
+	if (rc != 0)
+		goto exit;
+
+	reg = phy_read(phydev, MSCC_PHY_EEE_CNTL);
+	if (led_num) {
+		if (inv)
+			reg |= (1 << LED_1_INVERT_SEL_POS);
+		else
+			reg &= ~LED_1_INVERT_SEL_MASK;
+	} else {
+		if (inv)
+			reg |= (1 << LED_0_INVERT_SEL_POS);
+		else
+			reg &= ~LED_0_INVERT_SEL_MASK;
+	}
+
+	rc = phy_write(phydev, MSCC_PHY_EEE_CNTL, reg);
+	rc |= vsc85xx_phy_page_set(phydev, MSCC_PHY_PAGE_STANDARD);
+
+exit:
+	mutex_unlock(&phydev->lock);
+	return rc;
+}
+
+static int vsc85xx_led_blink_rate_set(struct phy_device *phydev, u8 rate)
+{
+	u16 reg;
+	int rc;
+
+	mutex_lock(&phydev->lock);
+
+	reg = phy_read(phydev, MSCC_PHY_LED_BEHAV);
+	reg &= ~LED_BLINK_RATE_MASK;
+	reg |= rate << LED_BLINK_RATE_POS;
+	rc = phy_write(phydev, MSCC_PHY_LED_BEHAV, reg);
+	mutex_unlock(&phydev->lock);
+	return rc;
+}
+
+static int vsc85xx_led_init(struct phy_device *phydev)
+{
+	int rc;
+	struct vsc8531_private *vsc8531 = phydev->priv;
+
+	rc = vsc85xx_led_blink_rate_set(phydev, vsc8531->led_blink_rate);
+	if (rc)
+		return rc;
+
+	rc = vsc85xx_led_drive_set(phydev, vsc8531->led_drive);
+	if (rc)
+		return rc;
+
+	rc = vsc85xx_led_inv_pol_set(phydev, 1, vsc8531->led_1_inv_pol);
+	if (rc)
+		return rc;
+
+	rc = vsc85xx_led_inv_pol_set(phydev, 0, vsc8531->led_0_inv_pol);
+	if (rc)
+		return rc;
+
+	rc = vsc85xx_led_cntl_set(phydev, 1, vsc8531->led_1_mode);
+	if (rc)
+		return rc;
+
+	rc = vsc85xx_led_cntl_set(phydev, 0, vsc8531->led_0_mode);
+	if (rc)
+		return rc;
+
+	return 0;
 }
 
 static int vsc85xx_mdix_get(struct phy_device *phydev, u8 *mdix)
@@ -424,6 +551,21 @@ static int vsc85xx_dt_led_mode_get(struct phy_device *phydev,
 	return led_mode;
 }
 
+static int vsc85xx_of_parse_led_config(struct phy_device *phydev)
+{
+	struct vsc8531_private *vsc8531 = phydev->priv;
+	struct device *dev = &phydev->mdio.dev;
+	struct device_node *of_node = dev->of_node;
+
+	vsc8531->led_drive = of_property_read_bool(of_node, "vsc8531,led-drive");
+	vsc8531->led_0_inv_pol = of_property_read_bool(of_node, "vsc8531,led-0-inv-pol");
+	vsc8531->led_1_inv_pol = of_property_read_bool(of_node, "vsc8531,led-1-inv-pol");
+
+	vsc8531->led_blink_rate = VSC8531_LED_BLINK_RATE_5HZ;
+	of_property_read_u8(of_node, "vsc8531,led-blink-rate", &vsc8531->led_blink_rate);
+	return 0;
+}
+
 #else
 static int vsc85xx_edge_rate_magic_get(struct phy_device *phydev)
 {
@@ -435,6 +577,11 @@ static int vsc85xx_dt_led_mode_get(struct phy_device *phydev,
 				   u8 default_mode)
 {
 	return default_mode;
+}
+
+static int vsc85xx_of_parse_led_config(struct phy_device *phydev)
+{
+	return 0;
 }
 #endif /* CONFIG_OF_MDIO */
 
@@ -560,11 +707,7 @@ static int vsc85xx_config_init(struct phy_device *phydev)
 	if (rc)
 		return rc;
 
-	rc = vsc85xx_led_cntl_set(phydev, 1, vsc8531->led_1_mode);
-	if (rc)
-		return rc;
-
-	rc = vsc85xx_led_cntl_set(phydev, 0, vsc8531->led_0_mode);
+	rc = vsc85xx_led_init(phydev);
 	if (rc)
 		return rc;
 
@@ -653,7 +796,7 @@ static int vsc85xx_probe(struct phy_device *phydev)
 		return led_mode;
 	vsc8531->led_1_mode = led_mode;
 
-	return 0;
+	return vsc85xx_of_parse_led_config(phydev);
 }
 
 /* Microsemi VSC85xx PHYs */
