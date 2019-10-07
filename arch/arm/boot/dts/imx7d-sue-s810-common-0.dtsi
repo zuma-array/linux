@@ -250,9 +250,6 @@
  * 	SIO			(1 << 30): Software Input On Field.
  */
 &iomuxc {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_32kHz>;
-
 	imx7d-sue-s810-common {
 		pinctrl_wifi: wifigrp {
 			fsl,pins = <
@@ -401,7 +398,7 @@
 
 &pcie {
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_wifi>;
+	pinctrl-0 = <&pinctrl_wifi &pinctrl_32kHz>;
 
 	reset-gpio = <&gpio4 23 GPIO_ACTIVE_LOW>;
 	disable-gpio = <&gpio4 20 GPIO_ACTIVE_LOW>;
