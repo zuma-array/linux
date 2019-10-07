@@ -32,6 +32,12 @@ Optional properties:
 			  VSC8531_LINK_ACTIVITY (0) and
 			  VSC8531_DUPLEX_COLLISION (8).
 
+- vsc8531,led-[N]-inv-pol : Invert the polarity of LED[N].
+- vsc8531,led-drive	: Actively drive the LED pins.
+- vsc8531,led-blink-rate: Configure the blink rate of the LEDS.
+			  Allowed values are define in
+			  "include/dt-bindings/net/mscc-phy-vsc8531.h".
+			  Default value is VSC8531_LED_BLINK_RATE_5HZ (1).
 
 Table: 1 - Edge rate change
 ----------------------------------------------------------------|
@@ -67,4 +73,8 @@ Example:
                 vsc8531,edge-slowdown	= <7>;
                 vsc8531,led-0-mode	= <LINK_1000_ACTIVITY>;
                 vsc8531,led-1-mode	= <LINK_100_ACTIVITY>;
+                vsc8531,led-0-inv-pol;
+                vsc8531,led-1-inv-pol;
+                vsc8531,led-drive;
+                vst8531,led-blink-rate	= <VSC8531_LED_BLINK_RATE_10HZ>;
         };
