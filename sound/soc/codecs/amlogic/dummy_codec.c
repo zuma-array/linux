@@ -132,6 +132,8 @@ static const struct of_device_id amlogic_codec_dt_match[] = {
 static int dummy_codec_platform_probe(struct platform_device *pdev)
 {
 	struct dummy_codec_private *dummy_codec;
+	struct device_node *np = pdev->dev.of_node;
+	int count, i;
 	int ret;
 
 	dummy_codec = kzalloc(sizeof(struct dummy_codec_private), GFP_KERNEL);
@@ -139,6 +141,20 @@ static int dummy_codec_platform_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	platform_set_drvdata(pdev, dummy_codec);
+
+	count = of_property_count_u32_elems(np, "playback-rates");
+	if (count > 0) {
+		dummy_codec_dai.playback.rates = 0;
+		for (i = 0; i < count; i++) {
+			u32 rate;
+			ret = of_property_read_u32_index(np, "playback-rates", i, &rate);
+			if (snd_pcm_rate_to_rate_bit(rate) == SNDRV_PCM_RATE_KNOT)
+				dev_warn(&pdev->dev, "rate %d not recognized, skipping\n", rate);
+			else
+				dummy_codec_dai.playback.rates |= snd_pcm_rate_to_rate_bit(rate);
+		}
+	}
+
 	ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_dummy_codec,
 				     &dummy_codec_dai, 1);
 
