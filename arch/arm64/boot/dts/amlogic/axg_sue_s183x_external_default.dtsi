@@ -63,6 +63,7 @@
 	dummy_codec:dummy{
 		#sound-dai-cells = <0>;
 		compatible = "amlogic, aml_dummy_codec";
+		playback-rates = <44100 48000 64000 88200 96000 176400 192000>;
 		status = "okay";
 	};
 
