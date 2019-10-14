@@ -397,7 +397,14 @@ static int clk_divider_set_rate(struct clk_hw *hw, unsigned long rate,
 		val &= ~(div_mask(divider->width) << divider->shift);
 	}
 	val |= value << divider->shift;
-	clk_writel(val, divider->reg);
+
+	/*
+	 * Only write the register if the actual value has changed. The reason
+	 * for this is that some dividers like the ones on imx7 and imx8 will
+	 * actually create a glitch even if the same value is written twice.
+	 */
+	if (val != clk_readl(divider->reg))
+		clk_writel(val, divider->reg);
 
 	if (divider->lock)
 		spin_unlock_irqrestore(divider->lock, flags);
