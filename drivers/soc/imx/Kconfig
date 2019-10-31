@@ -24,6 +24,17 @@ config IMX8M_BUSFREQ
 	depends on SOC_IMX8M
 	default ARCH_MXC
 
+config IMX8MM_SIMPLE_BUSFREQ
+	bool "Simple i.MX8MM busfreq driver"
+	depends on ARCH_MXC && ARM64
+	depends on OF
+	default y if ARCH_MXC && ARM64
+	help
+	  This is a simplified driver to allow the enabling and disabling
+	  of the low busfrequency mode from userspace via a sysfs file. The
+	  mode will change the DDR memory speed as well as the internal bus
+	  clocks.
+
 config SECVIO_SC
 	tristate "NXP SC secvio support"
 	depends on IMX_SCU
