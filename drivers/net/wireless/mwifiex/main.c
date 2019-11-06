@@ -436,6 +436,14 @@ static void mwifiex_terminate_workqueue(struct mwifiex_adapter *adapter)
 	}
 }
 
+int imx_pci_reset_bus(void);
+static void pcie_reset_work(struct work_struct *work)
+{
+	pr_warn("mwifiex: resetting the PCIe bus\n");
+	imx_pci_reset_bus();
+}
+static DECLARE_DELAYED_WORK(reset_work, pcie_reset_work);
+
 /*
  * This function gets firmware and initializes it.
  *
@@ -588,6 +596,10 @@ done:
 	if (init_failed)
 		mwifiex_free_adapter(adapter);
 	up(sem);
+
+	if (init_failed)
+		schedule_delayed_work(&reset_work, msecs_to_jiffies(500));
+
 	return;
 }
 
@@ -1186,6 +1198,7 @@ err_init_sw:
 	up(sem);
 
 exit_sem_err:
+	schedule_delayed_work(&reset_work, msecs_to_jiffies(500));
 	return -1;
 }
 EXPORT_SYMBOL_GPL(mwifiex_add_card);
