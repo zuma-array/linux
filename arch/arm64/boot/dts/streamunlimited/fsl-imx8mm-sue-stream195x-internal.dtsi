@@ -23,6 +23,24 @@
 		 */
 		/delete-node/linux,cma;
 	};
+
+	simple-busfreq {
+		compatible = "sue,simple-busfreq-imx8mm";
+
+		clocks = <&clk IMX8MM_CLK_NOC_DIV>,
+			 <&clk IMX8MM_CLK_AHB_DIV>,
+			 <&clk IMX8MM_CLK_MAIN_AXI_SRC>,
+			 <&clk IMX8MM_CLK_24M>,
+			 <&clk IMX8MM_SYS_PLL2_333M>;
+		clock-names = "noc_div",
+			      "ahb_div",
+			      "main_axi_src",
+			      "osc_24m",
+			      "sys_pll2_333m";
+
+		interrupts = <GIC_SPI 74 IRQ_TYPE_LEVEL_HIGH>, <GIC_SPI 75 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 76 IRQ_TYPE_LEVEL_HIGH>, <GIC_SPI 77 IRQ_TYPE_LEVEL_HIGH>;
+	};
 };
 
 &A53_0 {
@@ -31,9 +49,8 @@
 
 &busfreq {
 	/*
-	 * Disable the busfreq for now since it seems to be broken for some
-	 * reason or another (probably not compatible out of the box with
-	 * the Stream195x memory configuration).
+	 * Disable the NXP busfreq driver because it is way too overcomplicated for
+	 * our needs, instead we will use our own, simple driver.
 	 */
 	status = "disabled";
 };
