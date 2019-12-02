@@ -1042,6 +1042,7 @@ static void pci_imx_pm_turn_off(struct imx6_pcie *imx6_pcie)
 #ifdef CONFIG_PM_SLEEP
 static int pci_imx_suspend_noirq(struct device *dev)
 {
+	int ret = 0;
 	struct imx6_pcie *imx6_pcie = dev_get_drvdata(dev);
 	struct pcie_port *pp = &imx6_pcie->pp;
 
@@ -1090,6 +1091,12 @@ static int pci_imx_suspend_noirq(struct device *dev)
 				IMX6Q_GPR1_PCIE_TEST_PD);
 	}
 
+	if (imx6_pcie->pcie_dev_regulator) {
+		ret = regulator_disable(imx6_pcie->pcie_dev_regulator);
+		if (ret < 0)
+			dev_warn(dev, "failed to disable pcie_dev_regulator\n");
+	}
+
 	mutex_unlock(&imx6_pcie->pm_lock);
 	return 0;
 }
@@ -1101,6 +1108,12 @@ static int pci_imx_resume_noirq(struct device *dev)
 	struct pcie_port *pp = &imx6_pcie->pp;
 
 	mutex_lock(&imx6_pcie->pm_lock);
+
+	if (imx6_pcie->pcie_dev_regulator) {
+		ret = regulator_enable(imx6_pcie->pcie_dev_regulator);
+		if (ret < 0)
+			dev_warn(dev, "failed to disable pcie_dev_regulator\n");
+	}
 
 	if (is_imx6sx_pcie(imx6_pcie) || is_imx7d_pcie(imx6_pcie)
 			|| is_imx6qp_pcie(imx6_pcie)) {
