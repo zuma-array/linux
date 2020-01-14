@@ -167,7 +167,7 @@ static const struct soc_enum spdif_audio_type_enum =
 
 static int spdifin_check_audio_type(void)
 {
-	int total_num = sizeof(type_texts)/sizeof(struct spdif_audio_info);
+	int total_num = ARRAY_SIZE(type_texts);
 	int pc = spdifin_get_audio_type();
 	int audio_type = 0;
 	int i;
