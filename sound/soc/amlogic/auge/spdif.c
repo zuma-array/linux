@@ -533,8 +533,8 @@ static snd_pcm_uframes_t aml_spdif_pointer(struct snd_pcm_substream *substream)
 	return bytes_to_frames(runtime, addr - start_addr);
 }
 
-int aml_spdif_silence(struct snd_pcm_substream *substream, int channel,
-		    snd_pcm_uframes_t pos, snd_pcm_uframes_t count)
+static int aml_spdif_silence(struct snd_pcm_substream *substream,
+		int channel, snd_pcm_uframes_t pos, snd_pcm_uframes_t count)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	int n = frames_to_bytes(runtime, count);
@@ -575,16 +575,6 @@ struct snd_soc_platform_driver aml_spdif_platform = {
 
 static int aml_dai_spdif_probe(struct snd_soc_dai *cpu_dai)
 {
-	//struct aml_spdif *p_spdif = snd_soc_dai_get_drvdata(cpu_dai);
-	int ret = 0;
-
-//	if (p_spdif->id == SPDIF_A) {
-		ret = snd_soc_add_dai_controls(cpu_dai, snd_spdif_controls,
-					ARRAY_SIZE(snd_spdif_controls));
-		if (ret < 0)
-			pr_err("%s, failed add snd spdif controls\n", __func__);
-//	}
-
 	pr_info(DRV_NAME": dai probe\n");
 
 	return 0;
@@ -617,35 +607,45 @@ static int aml_dai_spdif_startup(
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		/* enable clock gate */
 		ret = clk_prepare_enable(p_spdif->gate_spdifout);
+		if (ret) {
+			dev_err(dev, "Can't enable gate_spdifout clock: %d\n",
+				ret);
+			return ret;
+		}
 		/* enable clock */
 		ret = clk_prepare_enable(p_spdif->sysclk);
 		if (ret) {
 			dev_err(dev, "Can't enable pcm sysclk clock: %d\n",
 				ret);
-			goto err;
+			return ret;
 		}
 		ret = clk_prepare_enable(p_spdif->clk_spdifout);
 		if (ret) {
 			dev_err(dev, "Can't enable pcm clk_spdifout clock: %d\n",
 				ret);
-			goto err;
+			return ret;
 		}
 
 	} else {
 		/* enable clock gate */
 		ret = clk_prepare_enable(p_spdif->gate_spdifin);
+		if (ret) {
+			dev_err(dev, "Can't enable gate_spdifin clock: %d\n",
+				ret);
+			return ret;
+		}
 		/* enable clock */
 		ret = clk_prepare_enable(p_spdif->fixed_clk);
 		if (ret) {
 			dev_err(dev, "Can't enable pcm fixed_clk clock: %d\n",
 				ret);
-			goto err;
+			return ret;
 		}
 		ret = clk_prepare_enable(p_spdif->clk_spdifin);
 		if (ret) {
 			dev_err(dev, "Can't enable pcm clk_spdifin clock: %d\n",
 				ret);
-			goto err;
+			return ret;
 		}
 #ifdef __SPDIFIN_AUDIO_TYPE_HW_DETECT__
 		/* resample to 48k in default */
@@ -654,9 +654,6 @@ static int aml_dai_spdif_startup(
 	}
 
 	return 0;
-err:
-	pr_err("failed enable clock\n");
-	return -EINVAL;
 }
 
 static void aml_dai_spdif_shutdown(
@@ -826,6 +823,7 @@ static int aml_dai_spdif_hw_params(struct snd_pcm_substream *substream,
 
 	pr_info(DRV_NAME": dai %s hw params\n",
 			spdif_streams[substream->stream]);
+
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		rate *= 128;
 
@@ -904,7 +902,9 @@ static struct snd_soc_dai_driver aml_spdif_dai = {
 };
 
 static const struct snd_soc_component_driver aml_spdif_component = {
-	.name		= DRV_NAME,
+	.name			= DRV_NAME,
+	.controls		= snd_spdif_controls,
+	.num_controls	= ARRAY_SIZE(snd_spdif_controls),
 };
 
 static int aml_spdif_clks_parse_of(struct aml_spdif *p_spdif)
@@ -1000,14 +1000,17 @@ static int aml_spdif_platform_probe(struct platform_device *pdev)
 
 	/* irqs */
 	p_spdif->irq_spdifin = platform_get_irq_byname(pdev, "irq_spdifin");
-	if (p_spdif->irq_spdifin < 0)
-		dev_err(dev, "platform_get_irq_byname failed\n");
+	if (p_spdif->irq_spdifin < 0) {
+		ret = p_spdif->irq_spdifin;
+		dev_err(dev, "get irq_spdifin failed: %d\n", ret);
+	}
 
 	/* spdif pinmux */
 	p_spdif->pin_ctl = devm_pinctrl_get_select(dev, "spdif_pins");
 	if (IS_ERR(p_spdif->pin_ctl)) {
-		dev_info(dev, "aml_spdif_get_pins error!\n");
-		return PTR_ERR(p_spdif->pin_ctl);
+		ret = PTR_ERR(p_spdif->pin_ctl);
+		dev_err(dev, "aml_spdif_get_pins error: %d\n", ret);
+		return ret;
 	}
 
 	ret = devm_snd_soc_register_component(dev, &aml_spdif_component,
@@ -1022,8 +1025,8 @@ static int aml_spdif_platform_probe(struct platform_device *pdev)
 	/* spdifin sample rate change event */
 	p_spdif->edev = devm_extcon_dev_allocate(dev, spdifin_extcon);
 	if (IS_ERR(p_spdif->edev)) {
-		dev_err(dev, "failed to allocate spdifin extcon!!!\n");
-		ret = -ENOMEM;
+		ret = PTR_ERR(p_spdif->edev);
+		dev_err(dev, "failed to allocate spdifin extcon: %d\n", ret);
 	} else {
 		p_spdif->edev->dev.parent  = dev;
 		p_spdif->edev->name = "spdifin_event";
