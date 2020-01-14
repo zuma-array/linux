@@ -97,19 +97,7 @@ static const unsigned int spdifin_extcon[] = {
 	EXTCON_NONE,
 };
 
-/* current sample mode and its sample rate */
-/*int sample_mode[] = {
-	24000,
-	32000,
-	44100,
-	46000,
-	48000,
-	96000,
-	192000,
-};*/
-
 static const char *const spdifin_samplerate[] = {
-#if 1
 	"N/A",
 	"32000",
 	"44100",
@@ -118,16 +106,6 @@ static const char *const spdifin_samplerate[] = {
 	"96000",
 	"176400",
 	"192000"
-#else
-	"N/A",
-	"24000",
-	"32000",
-	"44100",
-	"46000",
-	"48000",
-	"96000",
-	"192000"
-#endif
 };
 
 static int spdifin_samplerate_get_enum(struct snd_kcontrol *kcontrol,
