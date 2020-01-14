@@ -129,7 +129,7 @@ static const struct soc_enum spdifin_sample_rate_enum[] = {
 };
 
 /* spdif in audio format detect: LPCM or NONE-LPCM */
-struct sppdif_audio_info {
+struct spdif_audio_info {
 	unsigned char aud_type;
 	/*IEC61937 package presamble Pc value*/
 	short pc;
@@ -146,7 +146,7 @@ static const char *const spdif_audio_type_texts[] = {
 	"PAUSE"
 };
 
-static const struct sppdif_audio_info type_texts[] = {
+static const struct spdif_audio_info type_texts[] = {
 	{0, 0, "LPCM"},
 	{1, 0x1, "AC3"},
 	{2, 0x15, "EAC3"},
@@ -167,7 +167,7 @@ static const struct soc_enum spdif_audio_type_enum =
 
 static int spdifin_check_audio_type(void)
 {
-	int total_num = sizeof(type_texts)/sizeof(struct sppdif_audio_info);
+	int total_num = sizeof(type_texts)/sizeof(struct spdif_audio_info);
 	int pc = spdifin_get_audio_type();
 	int audio_type = 0;
 	int i;
