@@ -74,10 +74,10 @@ static const struct snd_pcm_hardware aml_spdif_hardware = {
 		SNDRV_PCM_INFO_MMAP |
 		SNDRV_PCM_INFO_MMAP_VALID |
 		SNDRV_PCM_INFO_INTERLEAVED |
-	    SNDRV_PCM_INFO_BLOCK_TRANSFER | SNDRV_PCM_INFO_PAUSE,
+		SNDRV_PCM_INFO_BLOCK_TRANSFER | SNDRV_PCM_INFO_PAUSE,
 	.formats =
-	    SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE |
-	    SNDRV_PCM_FMTBIT_S32_LE,
+		SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE |
+		SNDRV_PCM_FMTBIT_S32_LE,
 
 	.period_bytes_min = 64,
 	.period_bytes_max = 128 * 1024,
@@ -182,6 +182,7 @@ static const struct sppdif_audio_info type_texts[] = {
 	{6, 0x003, "PAUSE"},
 	{6, 0x100, "PAUSE"},
 };
+
 static const struct soc_enum spdif_audio_type_enum =
 	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(spdif_audio_type_texts),
 			spdif_audio_type_texts);
@@ -224,14 +225,15 @@ static int spdifin_audio_type_get_enum(
 
 static const struct snd_kcontrol_new snd_spdif_controls[] = {
 
-	SOC_ENUM_EXT("SPDIFIN Sample Rate", spdifin_sample_rate_enum,
-				spdifin_samplerate_get_enum,
-				NULL),
+	SOC_ENUM_EXT("SPDIFIN Sample Rate",
+			spdifin_sample_rate_enum,
+			spdifin_samplerate_get_enum,
+			NULL),
 
 	SOC_ENUM_EXT("SPDIFIN Audio Type",
-			 spdif_audio_type_enum,
-			 spdifin_audio_type_get_enum,
-			 NULL),
+			spdif_audio_type_enum,
+			spdifin_audio_type_get_enum,
+			NULL),
 };
 
 static irqreturn_t spdifin_status_event(struct aml_spdif *p_spdif)
@@ -440,7 +442,6 @@ static int aml_spdif_open(struct snd_pcm_substream *substream)
 	return 0;
 }
 
-
 static int aml_spdif_close(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -463,7 +464,6 @@ static int aml_spdif_close(struct snd_pcm_substream *substream)
 
 	return 0;
 }
-
 
 static int aml_spdif_hw_params(struct snd_pcm_substream *substream,
 			 struct snd_pcm_hw_params *hw_params)
@@ -642,7 +642,6 @@ static int aml_dai_spdif_startup(
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		/* enable clock gate */
-
 		ret = clk_prepare_enable(p_spdif->gate_spdifout);
 		/* enable clock */
 		ret = clk_prepare_enable(p_spdif->sysclk);
@@ -704,7 +703,6 @@ static void aml_dai_spdif_shutdown(
 		clk_disable_unprepare(p_spdif->gate_spdifin);
 	}
 }
-
 
 static int aml_dai_spdif_prepare(
 	struct snd_pcm_substream *substream,
@@ -795,8 +793,8 @@ static int aml_dai_spdif_prepare(
 	return 0;
 }
 
-static int aml_dai_spdif_trigger(struct snd_pcm_substream *substream, int cmd,
-			       struct snd_soc_dai *cpu_dai)
+static int aml_dai_spdif_trigger(struct snd_pcm_substream *substream,
+		int cmd, struct snd_soc_dai *cpu_dai)
 {
 	struct aml_spdif *p_spdif = snd_soc_dai_get_drvdata(cpu_dai);
 
@@ -833,15 +831,17 @@ static int aml_dai_spdif_trigger(struct snd_pcm_substream *substream, int cmd,
 
 	return 0;
 }
+
 static int aml_dai_spdif_hw_params(struct snd_pcm_substream *substream,
-				struct snd_pcm_hw_params *params,
-				struct snd_soc_dai *cpu_dai)
+		struct snd_pcm_hw_params *params,
+		struct snd_soc_dai *cpu_dai)
 {
 	struct aml_spdif *p_spdif = snd_soc_dai_get_drvdata(cpu_dai);
 	unsigned int rate = params_rate(params);
 	int ret = 0;
 
 	pr_info("%s\n", __func__);
+
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		rate *= 128;
 
@@ -915,17 +915,17 @@ static struct snd_soc_dai_driver aml_spdif_dai = {
 	.probe = aml_dai_spdif_probe,
 	.remove = aml_dai_spdif_remove,
 	.playback = {
-	      .channels_min = 1,
-	      .channels_max = 2,
-	      .rates = AML_DAI_SPDIF_RATES,
-	      .formats = AML_DAI_SPDIF_FORMATS,
+		.channels_min = 1,
+		.channels_max = 2,
+		.rates = AML_DAI_SPDIF_RATES,
+		.formats = AML_DAI_SPDIF_FORMATS,
 	},
 	.capture = {
-	     .channels_min = 1,
-		 /* spdif 2ch + tdmin_lb 8ch(fake for loopback) */
-	     .channels_max = 10,
-	     .rates = AML_DAI_SPDIF_RATES,
-	     .formats = AML_DAI_SPDIF_FORMATS,
+		.channels_min = 1,
+		/* spdif 2ch + tdmin_lb 8ch(fake for loopback) */
+		.channels_max = 10,
+		.rates = AML_DAI_SPDIF_RATES,
+		.formats = AML_DAI_SPDIF_FORMATS,
 	},
 	.ops = &aml_dai_spdif_ops,
 };
@@ -1040,7 +1040,7 @@ static int aml_spdif_platform_probe(struct platform_device *pdev)
 	}
 
 	ret = devm_snd_soc_register_component(dev, &aml_spdif_component,
-					 &aml_spdif_dai, 1);
+			&aml_spdif_dai, 1);
 	if (ret) {
 		dev_err(dev, "devm_snd_soc_register_component failed\n");
 		return ret;
