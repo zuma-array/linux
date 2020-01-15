@@ -458,13 +458,6 @@ static int aml_spdif_hw_params(struct snd_pcm_substream *substream,
 					params_buffer_bytes(hw_params));
 }
 
-static int aml_spdif_hw_free(struct snd_pcm_substream *substream)
-{
-	snd_pcm_lib_free_pages(substream);
-
-	return 0;
-}
-
 static int aml_spdif_trigger(struct snd_pcm_substream *substream, int cmd)
 {
 #ifdef __SPDIFIN_AUDIO_TYPE_SW_DETECT__
@@ -552,23 +545,17 @@ int aml_spdif_silence(struct snd_pcm_substream *substream, int channel,
 	return 0;
 }
 
-static int aml_spdif_mmap(struct snd_pcm_substream *substream,
-			struct vm_area_struct *vma)
-{
-	return snd_pcm_lib_default_mmap(substream, vma);
-}
-
 static struct snd_pcm_ops aml_spdif_ops = {
 	.open      = aml_spdif_open,
 	.close     = aml_spdif_close,
 	.ioctl     = snd_pcm_lib_ioctl,
 	.hw_params = aml_spdif_hw_params,
-	.hw_free   = aml_spdif_hw_free,
+	.hw_free   = snd_pcm_lib_free_pages,
 	.prepare   = aml_spdif_prepare,
 	.trigger   = aml_spdif_trigger,
 	.pointer   = aml_spdif_pointer,
 	.silence   = aml_spdif_silence,
-	.mmap      = aml_spdif_mmap,
+	.mmap      = snd_pcm_lib_default_mmap,
 };
 
 #define PREALLOC_BUFFER		(32 * 1024)
