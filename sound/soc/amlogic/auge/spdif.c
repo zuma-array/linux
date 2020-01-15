@@ -544,11 +544,9 @@ int aml_spdif_silence(struct snd_pcm_substream *substream, int channel,
 		    snd_pcm_uframes_t pos, snd_pcm_uframes_t count)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	char *ppos;
-	int n;
+	int n = frames_to_bytes(runtime, count);
+	char *ppos = runtime->dma_area + frames_to_bytes(runtime, pos);
 
-	n = frames_to_bytes(runtime, count);
-	ppos = runtime->dma_area + frames_to_bytes(runtime, pos);
 	memset(ppos, 0, n);
 
 	return 0;
