@@ -113,17 +113,16 @@ static const char *const spdif_streams[] = {
 	"capture"
 };
 
+static int spdifin_check_sample_rate(void)
+{
+	return (spdifin_get_sample_rate() + 1) & 0x7;
+}
+
 static int spdifin_samplerate_get_enum(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
-	int val = spdifin_get_sample_rate();
-
-	if (val == 0x7)
-		val = 0;
-	else
-		val += 1;
-
-	ucontrol->value.integer.value[0] = val;
+	ucontrol->value.integer.value[0] =
+			spdifin_check_sample_rate();
 
 	return 0;
 }
