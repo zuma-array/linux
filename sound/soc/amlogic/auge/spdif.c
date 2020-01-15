@@ -189,13 +189,6 @@ static int spdifin_check_audio_type(void)
 	return audio_type;
 }
 
-#if 0
-static int spdifin_check_audio_type_is_pcm(void)
-{
-	return spdifin_check_audio_type() == 0;
-}
-#endif
-
 static int spdifin_audio_type_get_enum(
 	struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
