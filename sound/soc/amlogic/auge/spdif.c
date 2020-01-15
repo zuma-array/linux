@@ -853,15 +853,6 @@ static int aml_dai_spdif_hw_params(struct snd_pcm_substream *substream,
 	return ret;
 }
 
-static int aml_dai_set_spdif_fmt(struct snd_soc_dai *cpu_dai, unsigned int fmt)
-{
-	struct aml_spdif *p_spdif = snd_soc_dai_get_drvdata(cpu_dai);
-
-	pr_info("asoc aml_dai_set_spdif_fmt, %#x, %p\n", fmt, p_spdif);
-
-	return 0;
-}
-
 static void aml_set_spdifclk(struct aml_spdif *p_spdif)
 {
 	unsigned int mpll_freq = 0;
@@ -899,7 +890,6 @@ static struct snd_soc_dai_ops aml_dai_spdif_ops = {
 	.prepare = aml_dai_spdif_prepare,
 	.trigger = aml_dai_spdif_trigger,
 	.hw_params = aml_dai_spdif_hw_params,
-	.set_fmt = aml_dai_set_spdif_fmt,
 	.set_sysclk = aml_dai_set_spdif_sysclk,
 };
 
