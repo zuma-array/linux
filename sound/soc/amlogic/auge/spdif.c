@@ -42,6 +42,9 @@
 //#define __SPDIFIN_AUDIO_TYPE_HW_DETECT__
 //#define __SPDIFIN_AUDIO_TYPE_SW_DETECT__
 
+#define SPDIFIN_SAMPLE_RATE_ENUM_NAME		"SPDIFIN Sample Rate"
+#define SPDIFIN_AUDIO_TYPE_ENUM_NAME		"SPDIFIN Audio Type"
+
 struct aml_spdif {
 	struct pinctrl *pin_ctl;
 	struct aml_audio_controller *actrl;
@@ -200,12 +203,12 @@ static int spdifin_audio_type_get_enum(
 
 static const struct snd_kcontrol_new snd_spdif_controls[] = {
 
-	SOC_ENUM_EXT("SPDIFIN Sample Rate",
+	SOC_ENUM_EXT(SPDIFIN_SAMPLE_RATE_ENUM_NAME,
 			spdifin_sample_rate_enum,
 			spdifin_samplerate_get_enum,
 			NULL),
 
-	SOC_ENUM_EXT("SPDIFIN Audio Type",
+	SOC_ENUM_EXT(SPDIFIN_AUDIO_TYPE_ENUM_NAME,
 			spdif_audio_type_enum,
 			spdifin_audio_type_get_enum,
 			NULL),
