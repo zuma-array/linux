@@ -1275,6 +1275,15 @@ static int imx_pci_reset(struct imx6_pcie *imx6_pcie)
 			dev_warn(&pdev->dev, "failed to enable pcie_dev_regulator\n");
 	}
 
+	/*
+	 * `imx6_pcie_host_init()` will call `imx6_pcie_init_phy()` where the the PHY
+	 * regulator is enabled (refcount + 1), for that reason we need to disable it
+	 * here once.
+	 */
+	ret = regulator_disable(imx6_pcie->pcie_phy_regulator);
+	if (ret < 0)
+		dev_warn(&pdev->dev, "failed to disable pcie_phy_regulator\n");
+
 	/* At least 5 ms should be good enough */
 	usleep_range(5000, 8000);
 
