@@ -1284,6 +1284,14 @@ static int imx_pci_reset(struct imx6_pcie *imx6_pcie)
 	if (ret < 0)
 		dev_warn(&pdev->dev, "failed to disable pcie_phy_regulator\n");
 
+	/*
+	 * Similar as as for the PHY regulator from above, we also need to decrease the PHY
+	 * clock refcount to make sure it will be correct across resets since
+	 * `imx6_pcie_deassert_core_reset()` (called by `imx6_pcie_host_init()` below)
+	 * will re-enable it.
+	 */
+	clk_disable_unprepare(imx6_pcie->pcie_phy);
+
 	/* At least 5 ms should be good enough */
 	usleep_range(5000, 8000);
 
