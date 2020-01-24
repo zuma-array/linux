@@ -838,6 +838,11 @@ static const struct meson_spicc_data meson_spicc_txlx_data = {
 	.is_enhance	= true,
 };
 
+static const struct meson_spicc_data meson_spicc_axg_data = {
+	.max_speed_hz	= 80000000,
+	.is_enhance	= true,
+};
+
 static const struct of_device_id meson_spicc_of_match[] = {
 	{
 		.compatible	= "amlogic,meson-gx-spicc",
@@ -845,6 +850,10 @@ static const struct of_device_id meson_spicc_of_match[] = {
 	},
 	{
 		.compatible	= "amlogic,meson-txlx-spicc",
+		.data		= &meson_spicc_txlx_data,
+	},
+	{
+		.compatible	= "amlogic,meson-axg-spicc",
 		.data		= &meson_spicc_txlx_data,
 	},
 	{ /* sentinel */ }
