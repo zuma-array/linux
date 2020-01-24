@@ -21,7 +21,9 @@
  * boards which are not detectable via ADC.
  */
 
-&spicc_a {
+&spicc_a_mainline {
+	num-cs = <1>;
+	cs-gpios = <&gpio GPIOZ_3 GPIO_ACTIVE_HIGH>;
 	stream183x-display@0 {
 		compatible = "ilitek,ili9341";
 		status = "okay";
