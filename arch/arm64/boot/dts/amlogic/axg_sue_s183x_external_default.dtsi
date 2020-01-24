@@ -22,6 +22,10 @@
 
 
 / {
+	aliases {
+		spi0 = &spicc_a_mainline;
+	};
+
 	ethmac: ethernet@0xff3f0000 {
 		compatible = "amlogic, gxbb-eth-dwmac";
 
@@ -142,6 +146,20 @@
 			};
 		};
 	};
+
+	spicc_a_mainline: spi@ffd130000 {
+		status = "okay";
+		pinctrl-names= "default";
+		pinctrl-0=<&spicc_a_pins>;
+
+		compatible = "amlogic,meson-axg-spicc";
+		reg = <0x0 0xffd13000 0x0 0x3c>;
+		interrupts = <GIC_SPI 81 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&clkc CLKID_SPICC0>;
+		clock-names = "core";
+		#address-cells = <1>;
+		#size-cells = <0>;
+	};
 };
 
 &i2c1 {
@@ -152,12 +170,25 @@
 };
 
 &spicc_a {
-	status = "okay";
-	num_chipselect = <1>;
-	dma_en = <0>;
-	delay_control = <0x15>;
-	cs_delay = <10>;
-	enhance_dlyctl = <0>;
+	/*
+	 * The Amlogic SPICC driver has issues when using multiple GPIO chip selects,
+	 * so we disable it here and instead use the driver from the Linux kernel for
+	 * the Amlogic SPICC block.
+	 */
+	status = "disabled";
+};
+
+&spicc_a_pins {
+	mux {
+		/*
+		 * Remove the hardware chip select pins from the SPI0 mux, instead
+		 * GPIOs will be used to drive the respective chip select lines.
+		 */
+		groups = "spi0_clk",
+			"spi0_mosi",
+			"spi0_miso";
+		function = "spi0";
+	};
 };
 
 &audiobus {
