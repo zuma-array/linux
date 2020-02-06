@@ -95,8 +95,7 @@ static const struct regmap_access_table ak4458_spi_readable_regs = {
  * Volume control:
  * from -127 to 0 dB in 0.5 dB steps (mute instead of -127.5 dB)
  */
-static DECLARE_TLV_DB_SCALE(latt_tlv, -12750, 50, 1);
-static DECLARE_TLV_DB_SCALE(ratt_tlv, -12750, 50, 1);
+static DECLARE_TLV_DB_SCALE(lratt_tlv, -12750, 50, 1);
 
 /*
  * DEM1 bit DEM0 bit Mode
@@ -510,27 +509,40 @@ static const struct soc_enum ak4458_dac_enum[] = {
 			ak4458_dif_select_texts),
 };
 
+static int ak4458_put_volsw(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *)kcontrol->private_value;
+
+	unsigned int mask = (1 << fls(mc->max)) - 1;
+	int val, val_mask;
+	unsigned int i = 0;
+
+	if (mc->sign_bit)
+		mask = BIT(mc->sign_bit + 1) - 1;
+
+	val = ((ucontrol->value.integer.value[0] + mc->min) & mask);
+
+	if (mc->invert)
+		val = mc->max - val;
+
+	val_mask = mask << mc->shift;
+	val = val << mc->shift;
+
+	snd_soc_component_update_bits(component, AK4458_03_LCHATT, val_mask, val);
+	snd_soc_component_update_bits(component, AK4458_04_RCHATT, val_mask, val);
+	for (i = AK4458_0F_L2CHATT; i <= AK4458_14_R4CHATT; ++i) {
+		snd_soc_component_update_bits(component, i, val_mask, val);
+	}
+	return 1;
+}
+
 static const struct snd_kcontrol_new ak4458_snd_controls[] = {
-	SOC_SINGLE_TLV("AK4458 L1ch Digital Volume",
-		       AK4458_03_LCHATT, 0/*shift*/, 0xFF/*max value*/,
-		       0/*invert*/, latt_tlv),
-	SOC_SINGLE_TLV("AK4458 R1ch Digital Volume",
-		       AK4458_04_RCHATT, 0, 0xFF, 0, ratt_tlv),
-	SOC_SINGLE_TLV("AK4458 L2ch Digital Volume",
-		       AK4458_0F_L2CHATT, 0/*shift*/, 0xFF/*max value*/,
-		       0/*invert*/, latt_tlv),
-	SOC_SINGLE_TLV("AK4458 R2ch Digital Volume",
-		       AK4458_10_R2CHATT, 0, 0xFF, 0, ratt_tlv),
-	SOC_SINGLE_TLV("AK4458 L3ch Digital Volume",
-		       AK4458_11_L3CHATT, 0/*shift*/, 0xFF/*max value*/,
-		       0/*invert*/, latt_tlv),
-	SOC_SINGLE_TLV("AK4458 R3ch Digital Volume",
-		       AK4458_12_R3CHATT, 0, 0xFF, 0, ratt_tlv),
-	SOC_SINGLE_TLV("AK4458 L4ch Digital Volume",
-		       AK4458_13_L4CHATT, 0/*shift*/, 0xFF/*max value*/,
-		       0/*invert*/, latt_tlv),
-	SOC_SINGLE_TLV("AK4458 R4ch Digital Volume",
-		       AK4458_14_R4CHATT, 0, 0xFF, 0, ratt_tlv),
+	SOC_SINGLE_EXT_TLV("Master Volume",
+		       AK4458_03_LCHATT/*reg*/, 0/*shift*/, 0xFF/*max value*/,
+		       0/*invert*/, snd_soc_get_volsw, ak4458_put_volsw,
+		       lratt_tlv),
 
 	SOC_ENUM("AK4458 De-emphasis Response DAC1", ak4458_dac_enum[0]),
 	SOC_ENUM("AK4458 De-emphasis Response DAC2", ak4458_dac_enum[1]),
