@@ -32,6 +32,18 @@
  * - CS management is dumb, and goes UP between every burst, so is really a
  *   "Data Valid" signal than a Chip Select, GPIO link should be used instead
  *   to have a CS go down over the full transfer
+ *
+ * HACK: Andre Groenewald <andre.groenewald@streamunlimited.com>
+ * Some devices can not operate properly with a CS that de-selects after 16
+ * words. It is therefore, necessary to use GPIO CS as suggested above. However,
+ * the first byte seems to be corruptly receive by the slave device when
+ * switching to different configs fori the different device requirements. This
+ * is most likely a bug in the hw. The exact parameter(s) that trigger this
+ * phenomena was not determined. But, it was found that, sending a dummy byte
+ * whenever the configuration changes seems to cure the issue. The CS is
+ * de-selected during the transfer so it should not break anything
+ * (without warranty). The real transfer is than kicked off inside the
+ * interrupt, after clearing the receive buffer.
  */
 
 #define SPICC_MAX_FREQ	30000000
@@ -137,6 +149,7 @@ struct meson_spicc_device {
 	unsigned long			xfer_remain;
 	bool				is_burst_end;
 	bool				is_last_burst;
+	bool				dummy_mode;
 };
 
 static inline bool meson_spicc_txfull(struct meson_spicc_device *spicc)
@@ -236,11 +249,38 @@ static inline void meson_spicc_setup_burst(struct meson_spicc_device *spicc,
 	meson_spicc_tx(spicc);
 }
 
+static void meson_spicc_set_cs(struct spi_device *spi, bool enable)
+{
+	struct meson_spicc_device *spicc = spi_master_get_devdata(spi->master);
+	/* We only call this function when we overwrite CS. De-select prevents
+	 * the device from reading this byte. See original comment on this hack.
+	 * Thus, de-select enable dummy mode and select clears it.
+	 */
+	spicc->dummy_mode = !enable;
+
+	/* Check if we should invert enable */
+	if (spi->mode & SPI_CS_HIGH)
+		enable = !enable;
+
+	if (gpio_is_valid(spi->cs_gpio))
+		gpio_set_value(spi->cs_gpio, !enable);
+}
+
 static irqreturn_t meson_spicc_irq(int irq, void *data)
 {
 	struct meson_spicc_device *spicc = (void *) data;
 	u32 ctrl = readl_relaxed(spicc->base + SPICC_INTREG);
 	u32 stat = readl_relaxed(spicc->base + SPICC_STATREG) & ctrl;
+
+	/*
+	 * HACK: Check if we are in dummy mode. The actual transfer starts after
+	 * dummy mode, we need to clear the receive buffer and also enable the
+	 * chip select. See first comment on dummy mode for more info
+	 */
+	if (spicc->dummy_mode) {
+		(void)readl_relaxed(spicc->base + SPICC_RXDATA);
+		meson_spicc_set_cs(spicc->message->spi, true);
+	}
 
 	ctrl &= ~(SPICC_RH_EN | SPICC_RR_EN);
 
@@ -332,10 +372,11 @@ static u32 meson_spicc_setup_speed(struct meson_spicc_device *spicc, u32 conf,
 	return conf;
 }
 
-static void meson_spicc_setup_xfer(struct meson_spicc_device *spicc,
-				   struct spi_transfer *xfer)
+static int meson_spicc_setup_xfer(struct meson_spicc_device *spicc,
+				  struct spi_transfer *xfer)
 {
 	u32 conf, conf_orig;
+	bool ret;
 
 	/* Read original configuration */
 	conf = conf_orig = readl_relaxed(spicc->base + SPICC_CONREG);
@@ -351,6 +392,40 @@ static void meson_spicc_setup_xfer(struct meson_spicc_device *spicc,
 	/* Ignore if unchanged */
 	if (conf != conf_orig)
 		writel_relaxed(conf, spicc->base + SPICC_CONREG);
+
+	/* ret = true for any config changes */
+	ret = clk_get_rate(spicc->clk) != xfer->speed_hz || conf != conf_orig;
+
+	return ret;
+}
+
+/*
+ * HACK: this prepare the SPI to send one single dummy byte while CS is not
+ * selected, the real transfer while then begin after the interrupt. See the
+ * first comments on this hack for more info.
+ */
+static void meson_spicc_do_dummy_xfer(struct meson_spicc_device *spicc)
+{
+	/* First we de-select the CS */
+	meson_spicc_set_cs(spicc->message->spi, false);
+
+	/* Set for only one byte transfer */
+	writel_bits_relaxed(SPICC_BURSTLENGTH_MASK,
+			FIELD_PREP(SPICC_BURSTLENGTH_MASK,
+			1),
+			spicc->base + SPICC_CONREG);
+
+	/* Clear the buffer and all the variables */
+	writel_relaxed(0, spicc->base + SPICC_TXDATA);
+	spicc->tx_remain = 0;
+	spicc->rx_remain = 0;
+	spicc->is_last_burst = false;
+
+	/* Start burst */
+	writel_bits_relaxed(SPICC_XCH, SPICC_XCH, spicc->base + SPICC_CONREG);
+
+	/* Enable TC interrupt */
+	writel_relaxed(SPICC_TC_EN, spicc->base + SPICC_INTREG);
 }
 
 static int meson_spicc_transfer_one(struct spi_master *master,
@@ -374,7 +449,17 @@ static int meson_spicc_transfer_one(struct spi_master *master,
 	   DIV_ROUND_UP(spicc->xfer->bits_per_word, 8);
 
 	/* Setup transfer parameters */
-	meson_spicc_setup_xfer(spicc, xfer);
+	if (meson_spicc_setup_xfer(spicc, xfer) &&
+			/* Check if we are using GPIO chip select */
+			gpio_is_valid(spicc->message->spi->cs_gpio)) {
+		/*
+		 * HACK: This is part of the dummy hack, it starts a dummy
+		 * transfer when the configuration has changed and we are using
+		 * GPIO CS. See first comment on the hack for more info.
+		 */
+		meson_spicc_do_dummy_xfer(spicc);
+		return 1;
+	}
 
 	burst_len = min_t(unsigned int,
 			  spicc->xfer_remain / spicc->bytes_per_word,
