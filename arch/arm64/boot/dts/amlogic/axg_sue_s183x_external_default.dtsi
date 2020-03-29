@@ -340,8 +340,9 @@
 	};
 
 	tdmin_b_pins:tdmin_b_pins {
-		groups = "tdmb_din0",
-			"tdmb_fs";
+		groups = "tdmb_sclk",
+			"tdmb_fs",
+			"tdmb_din0";
 		function = "tdmb_in";
 	};
 
