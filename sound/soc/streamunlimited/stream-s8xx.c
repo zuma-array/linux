@@ -118,7 +118,7 @@ static int stream_s8xx_set_pll(struct snd_soc_am33xx_s800 *priv, unsigned int ra
 		return -EINVAL;
 	}
 
-	pllrate = (rate % 8000 == 0) ? IMX7D_SAI_PLL_48k : IMX7D_SAI_PLL_44k1;
+	pllrate = (IMX7D_SAI_PLL_48k % rate == 0) ? IMX7D_SAI_PLL_48k : IMX7D_SAI_PLL_44k1;
 
 	ret = clk_set_rate(priv->pllclk, pllrate);
 	if (ret)
@@ -132,7 +132,7 @@ static int stream_s8xx_set_pll(struct snd_soc_am33xx_s800 *priv, unsigned int ra
 
 static unsigned int rate_to_mclk(unsigned int rate)
 {
-	return (rate % 8000 == 0) ? MCLK_48k : MCLK_44k1;
+	return (MCLK_48k % rate == 0) ? MCLK_48k : MCLK_44k1;
 }
 
 /*
