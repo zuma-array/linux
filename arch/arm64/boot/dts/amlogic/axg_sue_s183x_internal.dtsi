@@ -104,6 +104,18 @@
 		serial1 = &uart_B;
 	};
 
+	gpio_buttons: gpio-keys {
+		compatible = "gpio-keys";
+
+		button_sense {
+			label = "button_sense";
+			/* The BUTTON_SENSE is the inverted NPB_IN so it is becomes active high.  */
+			gpios = <&gpio_ao 3 GPIO_ACTIVE_HIGH>;
+			linux,code = <KEY_POWER>;
+			wakeup-source;
+		};
+	};
+
 	memory@00000000 {
 		device_type = "memory";
 		linux,usable-memory = <0x0 0x000000 0x0 0x20000000>;
