@@ -34,18 +34,6 @@
 			    SNDRV_PCM_FMTBIT_S32_LE |	\
 			    SNDRV_PCM_FMTBIT_DSD_U8)
 
-#define ES9018_PCM_RATES   (SNDRV_PCM_RATE_5512  | SNDRV_PCM_RATE_8000 | \
-			    SNDRV_PCM_RATE_11025 | SNDRV_PCM_RATE_16000 | \
-			    SNDRV_PCM_RATE_22050 | SNDRV_PCM_RATE_32000 | \
-			    SNDRV_PCM_RATE_44100 | SNDRV_PCM_RATE_48000 | \
-			    SNDRV_PCM_RATE_64000 | SNDRV_PCM_RATE_88200 | \
-			    SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 | \
-			    SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 | \
-			    SNDRV_PCM_RATE_384000 | SNDRV_PCM_RATE_705600 | \
-			    SNDRV_PCM_RATE_768000 | SNDRV_PCM_RATE_1411200 | \
-			    SNDRV_PCM_RATE_1536000 | SNDRV_PCM_RATE_2822400 | \
-			    SNDRV_PCM_RATE_3072000)
-
 /* ES9018 registers */
 #define ES9018_INPUT_CONF	1
 #define ES9018_SOFT_VOL3	6
@@ -205,7 +193,9 @@ static struct snd_soc_dai_driver es9018_dai = {
 		.stream_name	= "Playback",
 		.channels_min	= 1,
 		.channels_max	= 2,
-		.rates		= ES9018_PCM_RATES,
+		.rate_min	= 5512,
+		.rate_max	= 3072000,
+		.rates		= SNDRV_PCM_RATE_CONTINUOUS,
 		.formats	= ES9018_PCM_FORMATS,
 	},
 	.ops = &es9018_dai_ops,
