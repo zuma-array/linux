@@ -1,0 +1,50 @@
+/*
+ * arch/arm64/boot/dts/amlogic/axg_sue_l2_streamkit1832_lcd_LQ035NC11.dtsi
+ *
+ * Copyright (C) 2020 StreamUnlimited, Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ */
+
+
+/*
+ * DT for the LQ035NC11 display using the lt7381 SPI bridge chip and its
+ * components located on the daughter board
+ */
+
+&stream183x_display {
+	width = <320>;
+	height = <240>;
+	pwm-count = <1800>;
+	backlight-max-brightness = <90>;
+	backlight-default-brightness = <75>;
+
+	display-timings {
+
+		LQ035NC11: LQ035NC11 {
+			clock-frequency = <13700000>;
+			hactive = <320>;
+			vactive = <240>;
+			hback-porch = <38>;
+			hsync-len = <30>;
+			hfront-porch = <20>;
+			vback-porch = <15>;
+			vsync-len = <3>;
+			vfront-porch = <4>;
+			hsync-active = <0>;
+			vsync-active = <0>;
+			de-active = <1>;
+			pixelclk-active = <0>;
+		};
+
+	};
+};

@@ -1,0 +1,34 @@
+/*
+ * arch/arm64/boot/dts/amlogic/axg_sue_l2_streamkit1832_dabfm.dtsi
+ *
+ * Copyright (C) 2020 StreamUnlimited, Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ */
+
+/*
+ * DT for components located on StreamKit1832 L0 daughter board which are
+ * selected with DIP switches, when the daughter board is present.
+ */
+
+&spicc_a_mainline {
+	num-cs = <2>;
+	cs-gpios = <&gpio GPIOZ_3 GPIO_ACTIVE_HIGH>,
+			<&gpio GPIOZ_4 GPIO_ACTIVE_HIGH>;
+
+	dabfm: spi@0 {
+		compatible = "sue,dabfm";
+		status = "okay";
+		reg = <0>;
+		spi-max-frequency = <9000000>;
+	};
+};

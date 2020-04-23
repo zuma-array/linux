@@ -1,0 +1,55 @@
+/*
+ * arch/arm64/boot/dts/amlogic/axg_sue_l2_streamkit1832_voice.dtsi
+ *
+ * Copyright (C) 2020 StreamUnlimited, Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ */
+
+/*
+ * DT for components located on StreamKit1832 L0 carrier board that is used by
+ * the daughter board, which are selected with DIP switches, when the daughter
+ * board is present.
+ */
+
+&auge_sound {
+	aml-audio-card,dai-link@4 {
+		mclk-fs = <256>;
+		cpu {
+			sound-dai = <&aml_pdm>;
+		};
+		codec {
+			sound-dai = <&pdm_codec>;
+		};
+	};
+};
+
+&audiobus {
+	aml_pdm: pdm {
+		compatible = "amlogic, snd-pdm";
+		#sound-dai-cells = <0>;
+		clocks = <&clkaudio CLKID_AUDIO_PDM
+			&clkc CLKID_FCLK_DIV3
+			&clkc CLKID_HIFI_PLL
+			&clkaudio CLKID_AUDIO_PDMIN0
+			&clkaudio CLKID_AUDIO_PDMIN1>;
+		clock-names = "gate",
+			"sysclk_srcpll",
+			"dclk_srcpll",
+			"pdm_dclk",
+			"pdm_sysclk";
+		pinctrl-names = "pdm_pins";
+		pinctrl-0 = <&pdmin_pins>;
+		filter_mode = <1>; /* mode 0~4, defalut:1 */
+		status = "okay";
+	};
+};
