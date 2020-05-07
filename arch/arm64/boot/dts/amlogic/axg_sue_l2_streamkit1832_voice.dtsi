@@ -21,6 +21,12 @@
  * board is present.
  */
 
+/ {
+	sue {
+		daughterboard = "voice";
+	};
+};
+
 &auge_sound {
 	aml-audio-card,dai-link@4 {
 		mclk-fs = <256>;
