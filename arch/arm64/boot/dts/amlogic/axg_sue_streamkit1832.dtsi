@@ -22,6 +22,10 @@
 
 
 / {
+	sue {
+		carrierboard = "streamkit1832";
+	};
+
 	aliases {
 		spi0 = &spicc_a_mainline;
 	};

@@ -22,3 +22,9 @@
  * This file is empty for now, as there is nothing on the factory module, which
  * would require device tree entry.
  */
+
+/ {
+	sue {
+		carrierboard = "factory";
+	};
+};
