@@ -20,6 +20,12 @@
  * selected with DIP switches, when the daughter board is present.
  */
 
+/ {
+	sue {
+		daughterboard = "dabfm";
+	};
+};
+
 &spicc_a_mainline {
 	num-cs = <2>;
 	cs-gpios = <&gpio GPIOZ_3 GPIO_ACTIVE_HIGH>,

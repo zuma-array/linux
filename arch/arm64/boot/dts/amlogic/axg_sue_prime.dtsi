@@ -21,6 +21,12 @@
  * boards which are not detectable via ADC.
  */
 
+/ {
+	sue {
+		carrierboard = "streamkitprime";
+	};
+};
+
 &spicc_a_mainline {
 	num-cs = <1>;
 	cs-gpios = <&gpio GPIOZ_3 GPIO_ACTIVE_HIGH>;
