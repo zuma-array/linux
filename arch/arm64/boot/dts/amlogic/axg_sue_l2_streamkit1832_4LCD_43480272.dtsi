@@ -1,5 +1,5 @@
 /*
- * arch/arm64/boot/dts/amlogic/axg_sue_l2_streamkit1832_lcd_LQ035NC11.dtsi
+ * arch/arm64/boot/dts/amlogic/axg_sue_l2_streamkit1832_4LCD_43480272.dtsi
  *
  * Copyright (C) 2020 StreamUnlimited, Inc. All rights reserved.
  *
@@ -17,35 +17,34 @@
 
 
 /*
- * DT for the LQ035NC11 display using the lt7381 SPI bridge chip and its
- * components located on the daughter board. This is the default 3.5in display
- * which fits in the StreamKit1832 case.
+ * DT for the 4LCD_43480272 display using the lt7381 SPI bridge chip and its
+ * components located on the daughter board. This is an alternative 4.3in 16:9
+ * display which does not fit in the StreamKit1832 case.
  */
 
 &stream183x_display {
-	width = <320>;
-	height = <240>;
+	width = <480>;
+	height = <272>;
 	pwm-count = <1800>;
 	backlight-max-brightness = <90>;
 	backlight-default-brightness = <75>;
 
 	display-timings {
 
-		LQ035NC11: LQ035NC11 {
-			clock-frequency = <13700000>;
-			hactive = <320>;
-			vactive = <240>;
-			hback-porch = <38>;
-			hsync-len = <30>;
+		FOUR_LCD_43480272: FOUR_LCD_43480272 {
+			clock-frequency = <14000000>;
+			hactive = <480>;
+			vactive = <272>;
+			hback-porch = <20>;
+			hsync-len = <20>;
 			hfront-porch = <20>;
-			vback-porch = <15>;
-			vsync-len = <3>;
-			vfront-porch = <4>;
-			hsync-active = <0>;
-			vsync-active = <0>;
-			de-active = <1>;
-			pixelclk-active = <0>;
+			vback-porch = <2>;
+			vsync-len = <10>;
+			vfront-porch = <40>;
+			hsync-active = <10>;
+			vsync-active = <30>;
+			de-active = <0>;
+			pixelclk-active = <1>;
 		};
-
 	};
 };
