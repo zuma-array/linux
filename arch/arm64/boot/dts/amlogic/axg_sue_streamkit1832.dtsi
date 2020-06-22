@@ -106,6 +106,12 @@
 	pinctrl-names="default";
 	pinctrl-0=<&b_i2c_master>;
 	clock-frequency = <400000>;
+
+	ma12040_20: ma12040@20 {
+		compatible = "infineon,ma12040";
+		#sound-dai-cells = <0>;
+		reg = <0x20>;
+	};
 };
 
 &spicc_a {
