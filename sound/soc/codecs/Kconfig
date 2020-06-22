@@ -90,6 +90,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_MAX9860 if I2C
 	select SND_SOC_MAX9768 if I2C
 	select SND_SOC_MAX9877 if I2C
+	select SND_SOC_MA12040 if I2C
 	select SND_SOC_MC13783 if MFD_MC13XXX
 	select SND_SOC_ML26124 if I2C
 	select SND_SOC_NAU8810 if I2C
@@ -1071,6 +1072,10 @@ config SND_SOC_MAX9768
 
 config SND_SOC_MAX9877
 	tristate
+
+config SND_SOC_MA12040
+	tristate "Infineon MA12040 amplifier"
+	depends on I2C
 
 config SND_SOC_MC13783
 	tristate
