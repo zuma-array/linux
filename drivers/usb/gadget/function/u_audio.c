@@ -26,6 +26,7 @@
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
+#include <sound/tlv.h>
 #include <sound/soc.h>
 
 #include "u_audio.h"
@@ -34,6 +35,8 @@
 #define PRD_SIZE_MAX	PAGE_SIZE
 #define MIN_PERIODS	4
 
+#define CAPTURE_VOLUME "UsbGadget Capture Volume"
+#define CAPTURE_SWITCH "UsbGadget Capture Mute"
 #define CAPTURE_RATE "UsbGadget Capture Rate"
 #define PLAYBACK_RATE "UsbGadget Playback Rate"
 
@@ -352,6 +355,79 @@ static int uac_pcm_open(struct snd_pcm_substream *substream)
 	return 0;
 }
 
+static int uac_mixer_volume_info(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	struct snd_uac_chip *uac = snd_kcontrol_chip(kcontrol);
+	struct g_audio *audio_dev = uac->audio_dev;
+	struct uac_params *params = &audio_dev->params;
+
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = params->c_vol_min / params->c_vol_step;
+	uinfo->value.integer.max = params->c_vol_max / params->c_vol_step;
+	return 0;
+}
+
+static int uac_mixer_volume_get(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_uac_chip *uac = snd_kcontrol_chip(kcontrol);
+	struct g_audio *audio_dev = uac->audio_dev;
+	struct uac_params *params = &audio_dev->params;
+
+	if (kcontrol->private_value == SNDRV_PCM_STREAM_CAPTURE)
+		ucontrol->value.integer.value[0] = params->c_volume;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
+static int uac_mixer_volume_put(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_uac_chip *uac = snd_kcontrol_chip(kcontrol);
+	struct g_audio *audio_dev = uac->audio_dev;
+	struct uac_params *params = &audio_dev->params;
+
+	if (kcontrol->private_value == SNDRV_PCM_STREAM_CAPTURE)
+		params->c_volume = ucontrol->value.integer.value[0];
+	else
+		return -EINVAL;
+
+	if (audio_dev->interrupt_capture_volume_cb)
+		audio_dev->interrupt_capture_volume_cb(audio_dev);
+
+	return 1; // 1 == propagate value
+}
+
+static int uac_mixer_switch_get(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_uac_chip *uac = snd_kcontrol_chip(kcontrol);
+	struct g_audio *audio_dev = uac->audio_dev;
+	struct uac_params *params = &audio_dev->params;
+
+	ucontrol->value.integer.value[0] = !params->c_mute;
+	return 0;
+}
+
+static int uac_mixer_switch_put(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_uac_chip *uac = snd_kcontrol_chip(kcontrol);
+	struct g_audio *audio_dev = uac->audio_dev;
+	struct uac_params *params = &audio_dev->params;
+
+	params->c_mute = !ucontrol->value.integer.value[0];
+
+	if (audio_dev->interrupt_capture_mute_cb)
+		audio_dev->interrupt_capture_mute_cb(audio_dev);
+
+	return 1; // 1 == propagate value
+}
+
 static int uac_pcm_rate_get(struct snd_kcontrol *kcontrol,
 			       struct snd_ctl_elem_value *ucontrol)
 {
@@ -372,6 +448,17 @@ static int uac_pcm_rate_get(struct snd_kcontrol *kcontrol,
 }
 
 static struct snd_kcontrol_new uac_pcm_controls[] = {
+{
+	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+	.name = CAPTURE_VOLUME,
+	.access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
+		SNDRV_CTL_ELEM_ACCESS_TLV_READ,
+	.info = uac_mixer_volume_info,
+	.get = uac_mixer_volume_get,
+	.put = uac_mixer_volume_put,
+	.private_value = SNDRV_PCM_STREAM_CAPTURE,
+},
+	SOC_SINGLE_EXT(CAPTURE_SWITCH, 0, 0, 1, 0, uac_mixer_switch_get, uac_mixer_switch_put),
 	SOC_SINGLE_EXT(CAPTURE_RATE, SNDRV_PCM_STREAM_CAPTURE, 0, 324000, 0, uac_pcm_rate_get, NULL),
 	SOC_SINGLE_EXT(PLAYBACK_RATE, SNDRV_PCM_STREAM_PLAYBACK, 0, 324000, 0, uac_pcm_rate_get, NULL)
 };
@@ -433,6 +520,32 @@ static struct snd_kcontrol *u_audio_get_ctl(struct g_audio *audio_dev,
 			return kctl;
 	return NULL;
 }
+
+int u_audio_set_capture_mute(struct g_audio *audio_dev, int mute)
+{
+	struct snd_kcontrol *ctl = u_audio_get_ctl(audio_dev, CAPTURE_SWITCH);
+	struct uac_params *params = &audio_dev->params;
+
+	params->c_mute = mute;
+	snd_ctl_notify(audio_dev->uac->card,
+			SNDRV_CTL_EVENT_MASK_VALUE, &ctl->id);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(u_audio_set_capture_mute);
+
+int u_audio_set_capture_volume(struct g_audio *audio_dev, int volume)
+{
+	struct snd_kcontrol *ctl = u_audio_get_ctl(audio_dev, CAPTURE_VOLUME);
+	struct uac_params *params = &audio_dev->params;
+
+	params->c_volume = volume;
+	snd_ctl_notify(audio_dev->uac->card,
+			SNDRV_CTL_EVENT_MASK_VALUE, &ctl->id);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(u_audio_set_capture_volume);
 
 int u_audio_set_capture_srate(struct g_audio *audio_dev, int srate)
 {
@@ -621,6 +734,11 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 	uac->audio_dev = g_audio;
 
 	params = &g_audio->params;
+	if (params->c_vol_step == 0)
+		params->c_vol_step = 1;
+	if (params->c_vol_max == 0)
+		params->c_vol_max = 1;
+
 	p_chmask = params->p_chmask;
 	c_chmask = params->c_chmask;
 
@@ -701,6 +819,14 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 
 	/* Add controls */
 	for (i = 0; i < ARRAY_SIZE(uac_pcm_controls); i++) {
+		if (i == 0) {
+			/* Update volume control range */
+			DECLARE_TLV_DB_SCALE(db_scale, params->c_vol_min,
+					params->c_vol_step, 0);
+			memcpy(g_audio->db_scale, db_scale,
+					sizeof(g_audio->db_scale));
+			uac_pcm_controls[i].tlv.p = g_audio->db_scale;
+		}
 		err = snd_ctl_add(card,
 				snd_ctl_new1(&uac_pcm_controls[i], uac));
 		if (err < 0)

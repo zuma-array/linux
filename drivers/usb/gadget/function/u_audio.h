@@ -34,6 +34,11 @@ struct uac_params {
 	int c_srate[UAC_MAX_RATES];	/* rate in Hz */
 	int c_srate_active;		/* selected rate in Hz */
 	int c_ssize;	/* sample size */
+	int c_vol_min;  /* minimum volume in dB * 100 */
+	int c_vol_max;  /* maximum volume in dB * 100 */
+	int c_vol_step; /* volume step in dB * 100 */
+	int c_volume;	/* volume attenuation in dB * 100 */
+	int c_mute;	/* mute toggle */
 
 	int req_number; /* number of preallocated requests */
 };
@@ -53,7 +58,12 @@ struct g_audio {
 	/* The ALSA Sound Card it represents on the USB-Client side */
 	struct snd_uac_chip *uac;
 
+	/* Callbacks to notify about alsa-indicated control changes */
+	void (*interrupt_capture_volume_cb)(struct g_audio *);
+	void (*interrupt_capture_mute_cb)(struct g_audio *);
+
 	struct uac_params params;
+	int db_scale[5];
 };
 
 static inline struct g_audio *func_to_g_audio(struct usb_function *f)
@@ -94,6 +104,8 @@ int u_audio_start_capture(struct g_audio *g_audio);
 void u_audio_stop_capture(struct g_audio *g_audio);
 int u_audio_start_playback(struct g_audio *g_audio);
 void u_audio_stop_playback(struct g_audio *g_audio);
+int u_audio_set_capture_mute(struct g_audio *audio_dev, int mute);
+int u_audio_set_capture_volume(struct g_audio *audio_dev, int volume);
 int u_audio_set_capture_srate(struct g_audio *audio_dev, int srate);
 int u_audio_set_playback_srate(struct g_audio *audio_dev, int srate);
 
