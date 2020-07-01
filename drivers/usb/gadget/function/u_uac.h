@@ -17,6 +17,9 @@
 
 #define UAC_DEF_CCHMASK		0x3
 #define UAC_DEF_CSRATE		48000
+#define UAC_DEF_VOL_MIN		(-12700)
+#define UAC_DEF_VOL_MAX		0
+#define UAC_DEF_VOL_STEP	100
 #define UAC_DEF_CSSIZE		2
 #define UAC_DEF_PCHMASK		0x3
 #define UAC_DEF_PSRATE		48000
@@ -30,6 +33,9 @@ struct f_uac_opts {
 	int				c_chmask;
 	int				c_srate[UAC_MAX_RATES];
 	int				c_srate_active;
+	int				c_vol_min;
+	int				c_vol_max;
+	int				c_vol_step;
 	int				c_ssize;
 	int				p_chmask;
 	int				p_srate[UAC_MAX_RATES];
