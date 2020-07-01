@@ -22,15 +22,20 @@
  */
 
 #include <linux/module.h>
+#include <sound/control.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
+#include <sound/soc.h>
 
 #include "u_audio.h"
 
 #define BUFF_SIZE_MAX	(PAGE_SIZE * 16)
 #define PRD_SIZE_MAX	PAGE_SIZE
 #define MIN_PERIODS	4
+
+#define CAPTURE_RATE "UsbGadget Capture Rate"
+#define PLAYBACK_RATE "UsbGadget Playback Rate"
 
 struct uac_req {
 	struct uac_rtd_params *pp; /* parent param */
@@ -286,18 +291,17 @@ static int uac_pcm_open(struct snd_pcm_substream *substream)
 {
 	struct snd_uac_chip *uac = snd_pcm_substream_chip(substream);
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	struct g_audio *audio_dev;
+	struct g_audio *audio_dev = uac->audio_dev;
 	struct uac_params *params;
 	int p_ssize, c_ssize;
 	int p_srate, c_srate;
 	int p_chmask, c_chmask;
 
-	audio_dev = uac->audio_dev;
 	params = &audio_dev->params;
 	p_ssize = params->p_ssize;
 	c_ssize = params->c_ssize;
-	p_srate = params->p_srate;
-	c_srate = params->c_srate;
+	p_srate = params->p_srate_active;
+	c_srate = params->c_srate_active;
 	p_chmask = params->p_chmask;
 	c_chmask = params->c_chmask;
 	uac->p_residue = 0;
@@ -348,6 +352,30 @@ static int uac_pcm_open(struct snd_pcm_substream *substream)
 	return 0;
 }
 
+static int uac_pcm_rate_get(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_uac_chip *uac = snd_kcontrol_chip(kcontrol);
+	struct g_audio *audio_dev = uac->audio_dev;
+	struct uac_params *params = &audio_dev->params;
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *)kcontrol->private_value;
+
+	if (mc->reg == SNDRV_PCM_STREAM_CAPTURE)
+		ucontrol->value.integer.value[0] = params->c_srate_active;
+	else if (mc->reg == SNDRV_PCM_STREAM_PLAYBACK)
+		ucontrol->value.integer.value[0] = params->p_srate_active;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
+static struct snd_kcontrol_new uac_pcm_controls[] = {
+	SOC_SINGLE_EXT(CAPTURE_RATE, SNDRV_PCM_STREAM_CAPTURE, 0, 324000, 0, uac_pcm_rate_get, NULL),
+	SOC_SINGLE_EXT(PLAYBACK_RATE, SNDRV_PCM_STREAM_PLAYBACK, 0, 324000, 0, uac_pcm_rate_get, NULL)
+};
+
 /* ALSA cries without these function pointers */
 static int uac_pcm_null(struct snd_pcm_substream *substream)
 {
@@ -391,6 +419,62 @@ static inline void free_ep(struct uac_rtd_params *prm, struct usb_ep *ep)
 	if (usb_ep_disable(ep))
 		dev_err(uac->card->dev, "%s:%d Error!\n", __func__, __LINE__);
 }
+
+static struct snd_kcontrol *u_audio_get_ctl(struct g_audio *audio_dev,
+		const char *name)
+{
+	struct snd_kcontrol *kctl;
+
+	if (unlikely(!name))
+		return NULL;
+
+	list_for_each_entry(kctl, &audio_dev->uac->card->controls, list)
+		if (!strncmp(kctl->id.name, name, sizeof(kctl->id.name)))
+			return kctl;
+	return NULL;
+}
+
+int u_audio_set_capture_srate(struct g_audio *audio_dev, int srate)
+{
+	struct snd_kcontrol *ctl = u_audio_get_ctl(audio_dev, CAPTURE_RATE);
+	struct uac_params *params = &audio_dev->params;
+	int i;
+
+	for (i = 0; i < UAC_MAX_RATES; i++) {
+		if (params->c_srate[i] == srate) {
+			params->c_srate_active = srate;
+			snd_ctl_notify(audio_dev->uac->card,
+					SNDRV_CTL_EVENT_MASK_VALUE, &ctl->id);
+			return 0;
+		}
+		if (params->c_srate[i] == 0)
+			break;
+	}
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(u_audio_set_capture_srate);
+
+int u_audio_set_playback_srate(struct g_audio *audio_dev, int srate)
+{
+	struct snd_kcontrol *ctl = u_audio_get_ctl(audio_dev, PLAYBACK_RATE);
+	struct uac_params *params = &audio_dev->params;
+	int i;
+
+	for (i = 0; i < UAC_MAX_RATES; i++) {
+		if (params->p_srate[i] == srate) {
+			params->p_srate_active = srate;
+			snd_ctl_notify(audio_dev->uac->card,
+					SNDRV_CTL_EVENT_MASK_VALUE, &ctl->id);
+			return 0;
+		}
+		if (params->p_srate[i] == 0)
+			break;
+	}
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(u_audio_set_playback_srate);
 
 int u_audio_start_capture(struct g_audio *audio_dev)
 {
@@ -456,6 +540,7 @@ int u_audio_start_playback(struct g_audio *audio_dev)
 	const struct usb_endpoint_descriptor *ep_desc;
 	int req_len, i;
 
+	dev_dbg(dev, "start playback with rate %d\n", params->p_srate_active);
 	ep = audio_dev->in_ep;
 	prm = &uac->p_prm;
 	config_ep_by_speed(gadget, &audio_dev->func, ep);
@@ -471,7 +556,7 @@ int u_audio_start_playback(struct g_audio *audio_dev)
 	/* pre-compute some values for iso_complete() */
 	uac->p_framesize = params->p_ssize *
 			    num_channels(params->p_chmask);
-	rate = params->p_srate * uac->p_framesize;
+	rate = params->p_srate_active * uac->p_framesize;
 	uac->p_interval = factor / (1 << (ep_desc->bInterval - 1));
 	uac->p_pktsize = min_t(unsigned int, rate / uac->p_interval,
 				prm->max_psize);
@@ -528,6 +613,7 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 	struct uac_params *params;
 	int p_chmask, c_chmask;
 	int err;
+	int i;
 
 	if (!g_audio)
 		return -EINVAL;
@@ -616,6 +702,14 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 
 	snd_pcm_lib_preallocate_pages_for_all(pcm, SNDRV_DMA_TYPE_CONTINUOUS,
 		snd_dma_continuous_data(GFP_KERNEL), 0, BUFF_SIZE_MAX);
+
+	/* Add controls */
+	for (i = 0; i < ARRAY_SIZE(uac_pcm_controls); i++) {
+		err = snd_ctl_add(card,
+				snd_ctl_new1(&uac_pcm_controls[i], uac));
+		if (err < 0)
+			goto snd_fail;
+	}
 
 	err = snd_card_register(card);
 
