@@ -21,19 +21,22 @@
 
 /*
  * The driver implements a simple UAC_2 topology.
- * USB-OUT -> IT_1 -> FU_2 -> OT_4 -> ALSA_Capture
- * ALSA_Playback -> IT_3 -> OT_5 -> USB-IN
+ * USB-OUT -> IT_1 -> FU_2 -> OT_3 -> ALSA_Capture
+ * ALSA_Playback -> IT_4 -> OT_5 -> USB-IN
  * Capture and Playback sampling rates are independently
  *  controlled by two clock sources :
  *    CLK_5 := c_srate, and CLK_6 := p_srate
  */
 #define USB_OUT_IT_ID	1
 #define USB_OUT_FU_ID	2
-#define IO_IN_IT_ID	3
-#define IO_OUT_OT_ID	4
-#define USB_IN_OT_ID	5
+#define IO_OUT_OT_ID	3
 #define USB_OUT_CLK_ID	6
+
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
+#define IO_IN_IT_ID	4
+#define USB_IN_OT_ID	5
 #define USB_IN_CLK_ID	7
+#endif
 
 #define CONTROL_ABSENT	0
 #define CONTROL_RDONLY	1
@@ -99,7 +102,11 @@ static struct usb_interface_assoc_descriptor iad_desc = {
 	.bDescriptorType = USB_DT_INTERFACE_ASSOCIATION,
 
 	.bFirstInterface = 0,
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	.bInterfaceCount = 3,
+#else
+	.bInterfaceCount = 2,
+#endif
 	.bFunctionClass = USB_CLASS_AUDIO,
 	.bFunctionSubClass = UAC2_FUNCTION_SUBCLASS_UNDEFINED,
 	.bFunctionProtocol = UAC_VERSION_2,
@@ -127,6 +134,7 @@ static struct usb_endpoint_descriptor std_ac_interrupt_desc = {
 	.bInterval = 8,
 };
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 /* Clock source for IN traffic */
 static struct uac_clock_source_descriptor in_clk_src_desc = {
 	.bLength = sizeof in_clk_src_desc,
@@ -138,6 +146,7 @@ static struct uac_clock_source_descriptor in_clk_src_desc = {
 	.bmControls = (CONTROL_RDWR << CLK_FREQ_CTRL),
 	.bAssocTerminal = 0,
 };
+#endif
 
 /* Clock source for OUT traffic */
 static struct uac_clock_source_descriptor out_clk_src_desc = {
@@ -187,6 +196,7 @@ static struct uac2_feature_unit_descriptor_2ctrl usb_out_fu_desc = {
 	},
 };
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 /* Input Terminal for I/O-In */
 static struct uac2_input_terminal_descriptor io_in_it_desc = {
 	.bLength = sizeof io_in_it_desc,
@@ -214,6 +224,7 @@ static struct uac2_output_terminal_descriptor usb_in_ot_desc = {
 	.bCSourceID = USB_IN_CLK_ID,
 	.bmControls = cpu_to_le16(CONTROL_RDWR << COPY_CTRL),
 };
+#endif
 
 /* Ouput Terminal for I/O-Out */
 static struct uac2_output_terminal_descriptor io_out_ot_desc = {
@@ -235,10 +246,17 @@ static struct uac2_ac_header_descriptor ac_hdr_desc = {
 
 	.bDescriptorSubtype = UAC_MS_HEADER,
 	.bcdADC = cpu_to_le16(0x200),
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	.bCategory = UAC2_FUNCTION_IO_BOX,
-	.wTotalLength = cpu_to_le16(sizeof in_clk_src_desc
-			+ sizeof out_clk_src_desc + sizeof usb_out_it_desc
-			+ sizeof io_in_it_desc + sizeof usb_in_ot_desc
+#else
+	.bCategory = UAC2_FUNCTION_DESKTOP_SPEAKER,
+#endif
+	.wTotalLength = cpu_to_le16( sizeof out_clk_src_desc
+			+ sizeof usb_out_it_desc
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
+			+ sizeof in_clk_src_desc + sizeof io_in_it_desc
+			+ sizeof usb_in_ot_desc
+#endif
 			+ sizeof io_out_ot_desc	+ sizeof usb_out_fu_desc
 			+ sizeof std_ac_interrupt_desc),
 	.bmControls = 0,
@@ -321,6 +339,7 @@ static struct uac2_iso_endpoint_descriptor as_iso_out_desc = {
 	.wLockDelay = 0,
 };
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 /* Audio Streaming IN Interface - Alt0 */
 static struct usb_interface_descriptor std_as_in_if0_desc = {
 	.bLength = sizeof std_as_in_if0_desc,
@@ -397,19 +416,24 @@ static struct uac2_iso_endpoint_descriptor as_iso_in_desc = {
 	.bLockDelayUnits = 0,
 	.wLockDelay = 0,
 };
+#endif
 
 static struct usb_descriptor_header *fs_audio_desc[] = {
 	(struct usb_descriptor_header *)&iad_desc,
 	(struct usb_descriptor_header *)&std_ac_if_desc,
 
 	(struct usb_descriptor_header *)&ac_hdr_desc,
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	(struct usb_descriptor_header *)&in_clk_src_desc,
+#endif
 	(struct usb_descriptor_header *)&out_clk_src_desc,
 	(struct usb_descriptor_header *)&usb_out_it_desc,
 	(struct usb_descriptor_header *)&usb_out_fu_desc,
+	(struct usb_descriptor_header *)&io_out_ot_desc,
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	(struct usb_descriptor_header *)&io_in_it_desc,
 	(struct usb_descriptor_header *)&usb_in_ot_desc,
-	(struct usb_descriptor_header *)&io_out_ot_desc,
+#endif
 	(struct usb_descriptor_header *)&std_ac_interrupt_desc,
 
 	(struct usb_descriptor_header *)&std_as_out_if0_desc,
@@ -420,6 +444,7 @@ static struct usb_descriptor_header *fs_audio_desc[] = {
 	(struct usb_descriptor_header *)&fs_epout_desc,
 	(struct usb_descriptor_header *)&as_iso_out_desc,
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	(struct usb_descriptor_header *)&std_as_in_if0_desc,
 	(struct usb_descriptor_header *)&std_as_in_if1_desc,
 
@@ -427,6 +452,7 @@ static struct usb_descriptor_header *fs_audio_desc[] = {
 	(struct usb_descriptor_header *)&as_in_fmt1_desc,
 	(struct usb_descriptor_header *)&fs_epin_desc,
 	(struct usb_descriptor_header *)&as_iso_in_desc,
+#endif
 	NULL,
 };
 
@@ -435,13 +461,17 @@ static struct usb_descriptor_header *hs_audio_desc[] = {
 	(struct usb_descriptor_header *)&std_ac_if_desc,
 
 	(struct usb_descriptor_header *)&ac_hdr_desc,
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	(struct usb_descriptor_header *)&in_clk_src_desc,
+#endif
 	(struct usb_descriptor_header *)&out_clk_src_desc,
 	(struct usb_descriptor_header *)&usb_out_it_desc,
 	(struct usb_descriptor_header *)&usb_out_fu_desc,
+	(struct usb_descriptor_header *)&io_out_ot_desc,
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	(struct usb_descriptor_header *)&io_in_it_desc,
 	(struct usb_descriptor_header *)&usb_in_ot_desc,
-	(struct usb_descriptor_header *)&io_out_ot_desc,
+#endif
 	(struct usb_descriptor_header *)&std_ac_interrupt_desc,
 
 	(struct usb_descriptor_header *)&std_as_out_if0_desc,
@@ -452,6 +482,7 @@ static struct usb_descriptor_header *hs_audio_desc[] = {
 	(struct usb_descriptor_header *)&hs_epout_desc,
 	(struct usb_descriptor_header *)&as_iso_out_desc,
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	(struct usb_descriptor_header *)&std_as_in_if0_desc,
 	(struct usb_descriptor_header *)&std_as_in_if1_desc,
 
@@ -459,6 +490,7 @@ static struct usb_descriptor_header *hs_audio_desc[] = {
 	(struct usb_descriptor_header *)&as_in_fmt1_desc,
 	(struct usb_descriptor_header *)&hs_epin_desc,
 	(struct usb_descriptor_header *)&as_iso_in_desc,
+#endif
 	NULL,
 };
 
@@ -616,32 +648,36 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 		return PTR_ERR(us);
 	iad_desc.iFunction = us[STR_ASSOC].id;
 	std_ac_if_desc.iInterface = us[STR_IF_CTRL].id;
-	in_clk_src_desc.iClockSource = us[STR_CLKSRC_IN].id;
 	out_clk_src_desc.iClockSource = us[STR_CLKSRC_OUT].id;
 	usb_out_it_desc.iTerminal = us[STR_USB_IT].id;
 	usb_out_fu_desc.iFeature = us[STR_VOL_FU].id;
-	io_in_it_desc.iTerminal = us[STR_IO_IT].id;
-	usb_in_ot_desc.iTerminal = us[STR_USB_OT].id;
 	io_out_ot_desc.iTerminal = us[STR_IO_OT].id;
 	std_as_out_if0_desc.iInterface = us[STR_AS_OUT_ALT0].id;
 	std_as_out_if1_desc.iInterface = us[STR_AS_OUT_ALT1].id;
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
+	in_clk_src_desc.iClockSource = us[STR_CLKSRC_IN].id;
+	io_in_it_desc.iTerminal = us[STR_IO_IT].id;
+	usb_in_ot_desc.iTerminal = us[STR_USB_OT].id;
 	std_as_in_if0_desc.iInterface = us[STR_AS_IN_ALT0].id;
 	std_as_in_if1_desc.iInterface = us[STR_AS_IN_ALT1].id;
+#endif
 
 
 	/* Initialize the configurable parameters */
 	usb_out_it_desc.bNrChannels = num_channels(uac2_opts->c_chmask);
 	usb_out_it_desc.bmChannelConfig = cpu_to_le32(uac2_opts->c_chmask);
-	io_in_it_desc.bNrChannels = num_channels(uac2_opts->p_chmask);
-	io_in_it_desc.bmChannelConfig = cpu_to_le32(uac2_opts->p_chmask);
 	as_out_hdr_desc.bNrChannels = num_channels(uac2_opts->c_chmask);
 	as_out_hdr_desc.bmChannelConfig = cpu_to_le32(uac2_opts->c_chmask);
-	as_in_hdr_desc.bNrChannels = num_channels(uac2_opts->p_chmask);
-	as_in_hdr_desc.bmChannelConfig = cpu_to_le32(uac2_opts->p_chmask);
 	as_out_fmt1_desc.bSubslotSize = uac2_opts->c_ssize;
 	as_out_fmt1_desc.bBitResolution = uac2_opts->c_ssize * 8;
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
+	io_in_it_desc.bNrChannels = num_channels(uac2_opts->p_chmask);
+	io_in_it_desc.bmChannelConfig = cpu_to_le32(uac2_opts->p_chmask);
+	as_in_hdr_desc.bNrChannels = num_channels(uac2_opts->p_chmask);
+	as_in_hdr_desc.bmChannelConfig = cpu_to_le32(uac2_opts->p_chmask);
 	as_in_fmt1_desc.bSubslotSize = uac2_opts->p_ssize;
 	as_in_fmt1_desc.bBitResolution = uac2_opts->p_ssize * 8;
+#endif
 
 	ret = usb_interface_id(cfg, fn);
 	if (ret < 0) {
@@ -662,6 +698,7 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	uac2->as_out_intf = ret;
 	uac2->as_out_alt = 0;
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	ret = usb_interface_id(cfg, fn);
 	if (ret < 0) {
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
@@ -671,12 +708,15 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	std_as_in_if1_desc.bInterfaceNumber = ret;
 	uac2->as_in_intf = ret;
 	uac2->as_in_alt = 0;
+#endif
 
 	/* Calculate wMaxPacketSize according to audio bandwidth */
-	set_ep_max_packet_size(uac2_opts, &fs_epin_desc, 1000, true);
 	set_ep_max_packet_size(uac2_opts, &fs_epout_desc, 1000, false);
-	set_ep_max_packet_size(uac2_opts, &hs_epin_desc, 8000, true);
 	set_ep_max_packet_size(uac2_opts, &hs_epout_desc, 8000, false);
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
+	set_ep_max_packet_size(uac2_opts, &fs_epin_desc, 1000, true);
+	set_ep_max_packet_size(uac2_opts, &hs_epin_desc, 8000, true);
+#endif
 
 	agdev->out_ep = usb_ep_autoconfig(gadget, &fs_epout_desc);
 	if (!agdev->out_ep) {
@@ -685,12 +725,14 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	}
 	agdev->out_ep->driver_data = fn;
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	agdev->in_ep = usb_ep_autoconfig(gadget, &fs_epin_desc);
 	if (!agdev->in_ep) {
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 		return ret;
 	}
 	agdev->in_ep->driver_data = fn;
+#endif
 
 	agdev->int_ep = usb_ep_autoconfig(gadget, &std_ac_interrupt_desc);
 	if (!agdev->int_ep) {
@@ -701,15 +743,19 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	agdev->interrupt_capture_mute_cb = interrupt_capture_mute_cb;
 	agdev->int_ep->driver_data = fn;
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	agdev->in_ep_maxpsize = max_t(u16,
 				le16_to_cpu(fs_epin_desc.wMaxPacketSize),
 				le16_to_cpu(hs_epin_desc.wMaxPacketSize));
+#endif
 	agdev->out_ep_maxpsize = max_t(u16,
 				le16_to_cpu(fs_epout_desc.wMaxPacketSize),
 				le16_to_cpu(hs_epout_desc.wMaxPacketSize));
 
 	hs_epout_desc.bEndpointAddress = fs_epout_desc.bEndpointAddress;
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	hs_epin_desc.bEndpointAddress = fs_epin_desc.bEndpointAddress;
+#endif
 
 	ret = usb_assign_descriptors(fn, fs_audio_desc, hs_audio_desc, NULL,
 				     NULL);
@@ -848,14 +894,21 @@ in_rq_cur(struct usb_function *fn, const struct usb_ctrlrequest *cr)
 
 	opts = g_audio_to_uac_opts(agdev);
 
-	if (entity_id == USB_IN_CLK_ID || entity_id == USB_OUT_CLK_ID) {
+	if (
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
+			entity_id == USB_IN_CLK_ID ||
+#endif
+			entity_id == USB_OUT_CLK_ID) {
 		if (control_selector == UAC2_CS_CONTROL_SAM_FREQ) {
 			struct cntrl_cur_lay3 c;
 			memset(&c, 0, sizeof(struct cntrl_cur_lay3));
 
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 			if (entity_id == USB_IN_CLK_ID)
 				c.dCUR = opts->p_srate_active;
-			else if (entity_id == USB_OUT_CLK_ID)
+			else
+#endif
+			if (entity_id == USB_OUT_CLK_ID)
 				c.dCUR = opts->c_srate_active;
 
 			DBG(fn->config->cdev, "%s(): %d\n", __func__, c.dCUR);
@@ -911,14 +964,21 @@ in_rq_range(struct usb_function *fn, const struct usb_ctrlrequest *cr)
 
 	opts = g_audio_to_uac_opts(agdev);
 
-	if (entity_id == USB_IN_CLK_ID || entity_id == USB_OUT_CLK_ID) {
+	if (
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
+			entity_id == USB_IN_CLK_ID ||
+#endif
+			entity_id == USB_OUT_CLK_ID) {
 		if (control_selector == UAC2_CS_CONTROL_SAM_FREQ) {
 			struct cntrl_ranges_lay3 rs;
 			rs.wNumSubRanges = 0;
 			for (i = 0; i < UAC_MAX_RATES; i++) {
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 				if (entity_id == USB_IN_CLK_ID)
 					srate = opts->p_srate[i];
-				else if (entity_id == USB_OUT_CLK_ID)
+				else
+#endif
+				if (entity_id == USB_OUT_CLK_ID)
 					srate = opts->c_srate[i];
 				else
 					return -EOPNOTSUPP;
@@ -1002,10 +1062,13 @@ static void uac2_cs_control_sam_freq(struct usb_ep *ep, struct usb_request *req)
 	}
 
 	val = le32_to_cpu(*((u32 *)req->buf));
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
 	if (uac2->ctl_id == USB_IN_CLK_ID) {
 		opts->p_srate_active = val;
 		u_audio_set_playback_srate(agdev, val);
-	} else if (uac2->ctl_id == USB_OUT_CLK_ID) {
+	} else
+#endif
+	if (uac2->ctl_id == USB_OUT_CLK_ID) {
 		opts->c_srate_active = val;
 		u_audio_set_capture_srate(agdev, val);
 	}
@@ -1060,7 +1123,11 @@ out_rq_cur(struct usb_function *fn, const struct usb_ctrlrequest *cr)
 	u8 control_selector = w_value >> 8;
 	u8 entity_id = w_index >> 8;
 
-	if (entity_id == USB_IN_CLK_ID || entity_id == USB_OUT_CLK_ID) {
+	if (
+#ifdef CONFIG_USB_CONFIGFS_F_UAC2_CAPTURE
+			entity_id == USB_IN_CLK_ID ||
+#endif
+			entity_id == USB_OUT_CLK_ID) {
 		if (control_selector == UAC2_CS_CONTROL_SAM_FREQ) {
 			DBG(cdev, "control_selector UAC2_CS_CONTROL_SAM_FREQ, clock: %d\n",
 					entity_id);

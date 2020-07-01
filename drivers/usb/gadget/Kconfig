@@ -427,6 +427,10 @@ config USB_CONFIGFS_F_UAC2
 	  received from the USB Host and choose to provide whatever it
 	  wants as audio data to the USB Host.
 
+config USB_CONFIGFS_F_UAC2_CAPTURE
+	bool "UAC2 capture (USB-IN) support"
+	depends on USB_CONFIGFS_F_UAC2
+
 config USB_CONFIGFS_F_MIDI
 	bool "MIDI function"
 	depends on USB_CONFIGFS
