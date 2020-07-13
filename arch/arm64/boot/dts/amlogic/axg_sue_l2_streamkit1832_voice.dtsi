@@ -27,16 +27,13 @@
 	};
 };
 
-&auge_sound {
-	aml-audio-card,dai-link@4 {
-		mclk-fs = <256>;
-		cpu {
-			sound-dai = <&aml_pdm>;
-		};
-		codec {
-			sound-dai = <&pdm_codec>;
-		};
-	};
+/*
+ * For three mic board configuration, the line from tdmb is "shared" with
+ * PDM_DIN1 on the module's exposed pin so if TDMB is driven, the PDM_DIN1
+ * outputs nothing.
+ */
+&aml_tdmb {
+	status = "disabled";
 };
 
 &audiobus {
@@ -57,5 +54,63 @@
 		pinctrl-0 = <&pdmin_pins>;
 		filter_mode = <1>; /* mode 0~4, defalut:1 */
 		status = "okay";
+	};
+};
+
+&auge_sound {
+	aml-audio-card,dai-link@1 {
+		mclk-fs = <256>;
+		cpu {
+			sound-dai = <&aml_pdm>;
+		};
+		codec {
+			sound-dai = <&pdm_codec>;
+		};
+	};
+
+	aml-audio-card,dai-link@2 {
+		format = "i2s";
+		continuous-clock;
+		bitclock-master = <&aml_tdmc>;
+		frame-master = <&aml_tdmc>;
+		cpu {
+			sound-dai = <&aml_tdmc>;
+			dai-tdm-slot-tx-mask = <1 1>;
+			dai-tdm-slot-rx-mask = <1 1>;
+			dai-tdm-slot-num = <2>;
+			dai-tdm-slot-width = <32>;
+			system-clock-frequency = <24576000>;
+		};
+		codec {
+			sound-dai = <&dummy_codec>;
+		};
+	};
+
+	aml-audio-card,dai-link@3 {
+		mclk-fs = <128>;
+		cpu {
+			sound-dai = <&aml_spdif>;
+			system-clock-frequency = <6144000>;
+		};
+		codec {
+			sound-dai = <&dummy_codec>;
+		};
+	};
+};
+
+&pdmin_pins {
+	mux {
+		/* Triple mic board configuration */
+		groups = "pdm_dclk_a14",
+		       "pdm_din0", /* PDM MIC0 on left channel, PDM MIC1 on right */
+		       "pdm_din1"; /* PDM MIC2 */
+		/*
+		 * Note:
+		 * - PDM_DIN2 can potentially conflicts with USB ID if J110 is
+		 * populated,
+		 * - PDM_DIN3 conflicts with reset-gpios of the display
+		 * controller and potentially USB VBUS if R140 is populated,
+		 */
+		function = "pdm";
 	};
 };
