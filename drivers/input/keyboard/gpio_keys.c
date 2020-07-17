@@ -397,6 +397,18 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 
 	BUG_ON(irq != bdata->irq);
 
+	/*
+	 * A113X GPIO interrupt controller only supports rising XOR falling edge
+	 * interrupts, c.f. 3.7.3 Register Description in datasheet,
+	 * specifically GPIO Interrupt EDGE and Polarity 0x3c20.
+	 *
+	 * This simulates a controller that can trigger interrupts on both
+	 * edges. When an edge interrupt is received, the interrupt edge is
+	 * swapped for the next to come.
+	 */
+	irq_set_irq_type(bdata->irq, gpiod_get_raw_value(bdata->gpiod) ?
+			 IRQF_TRIGGER_FALLING : IRQF_TRIGGER_RISING);
+
 	if (bdata->button->wakeup) {
 		const struct gpio_keys_button *button = bdata->button;
 
@@ -566,7 +578,21 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 		INIT_DELAYED_WORK(&bdata->work, gpio_keys_gpio_work_func);
 
 		isr = gpio_keys_gpio_isr;
-		irqflags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
+		/*
+		 * A113X GPIO interrupt controller only supports rising XOR
+		 * falling edge interrupts, c.f. 3.7.3 Register Description in
+		 * datasheet, specifically GPIO Interrupt EDGE and Polarity
+		 * 0x3c20.
+		 *
+		 * This simulates a controller that can trigger interrupts on
+		 * both edges. When an edge interrupt is received, the interrupt
+		 * edge is swapped for the next to come.
+		 *
+		 * This initializes the edge to be expected first depending on
+		 * the current state of the gpio.
+		 */
+		irqflags = gpiod_get_raw_value(bdata->gpiod) ?
+			IRQF_TRIGGER_FALLING : IRQF_TRIGGER_RISING;
 
 	} else {
 		if (!button->irq) {
