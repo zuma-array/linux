@@ -613,6 +613,19 @@ static void axp20x_power_off(void)
 
 static int axp20x_restart_handler_call(struct notifier_block *this, unsigned long mode, void *cmd)
 {
+	/*
+	 * If the kernel panicked we arrive here in atomic context, so we cannot use
+	 * any I2C communication to reconfigure the AXP for a clean reset, so instead
+	 * we just pull the GPIO line low which is the same that a hardware watchdog
+	 * would do.
+	 */
+	if (in_atomic()) {
+		printk("Got atomic context, only pulling GPIO low for reset\n");
+		gpiod_set_value(reset_wakeup_gpio, 0);
+		mdelay(50);
+		return NOTIFY_DONE;
+	}
+
 	/* Set the DCDC workmodes to the desired state before resetting */
 	if (axp20x_pm_power_off->reset_workmode_config != -1) {
 		regmap_update_bits(axp20x_pm_power_off->regmap, AXP20X_DCDC_MODE,
