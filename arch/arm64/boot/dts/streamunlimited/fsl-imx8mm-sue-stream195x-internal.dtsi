@@ -24,7 +24,7 @@
 		/delete-node/linux,cma;
 	};
 
-	simple-busfreq {
+	simple_busfreq: simple-busfreq {
 		compatible = "sue,simple-busfreq-imx8mm";
 
 		clocks = <&clk IMX8MM_CLK_NOC_DIV>,
