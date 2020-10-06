@@ -65,11 +65,3 @@
 &gpmi {
 	status = "disabled";
 };
-
-&simple_busfreq {
-	/*
-	 * simple-busfreq requires proper configuration in imx-atf for it not to crash the board. As this will be done
-	 * only later (see STREAMEIGHT-4327), disable it temporarily here.
-	 */
-	status = "disabled";
-};
