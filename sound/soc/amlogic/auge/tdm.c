@@ -713,21 +713,23 @@ static int aml_dai_set_tdm_slot(struct snd_soc_dai *cpu_dai,
 {
 	struct aml_tdm *p_tdm = snd_soc_dai_get_drvdata(cpu_dai);
 	struct snd_soc_dai_driver *drv = cpu_dai->driver;
-	unsigned int lanes_cnt = 0;
+	unsigned int lanes_playback_cnt = 0;
+	unsigned int lanes_capture_cnt = 0;
 
-	lanes_cnt = pop_count(p_tdm->setting.lane_mask_out);
+	lanes_playback_cnt = pop_count(p_tdm->setting.lane_mask_out);
+	lanes_capture_cnt = pop_count(p_tdm->setting.lane_mask_in);
 	pr_info("%s(), txmask(%#x), rxmask(%#x)\n",
 		__func__, tx_mask, rx_mask);
-	pr_info("\tslots(%d), slot_width(%d), lanes(%d)\n",
-		slots, slot_width, lanes_cnt);
+	pr_info("\tslots(%d), slot_width(%d), lanes_playback(%d), lanes_capture(%d)\n",
+		slots, slot_width, lanes_playback_cnt, lanes_capture_cnt);
 	p_tdm->setting.tx_mask = tx_mask;
 	p_tdm->setting.rx_mask = rx_mask;
 	p_tdm->setting.slots = slots;
 	p_tdm->setting.slot_width = slot_width;
 	aml_tdm_set_slot(p_tdm->actrl, slots, slot_width, p_tdm->id);
 	/* constrains hw channels_max by DTS configs */
-	drv->playback.channels_max = slots * lanes_cnt;
-	drv->capture.channels_max = slots * lanes_cnt;
+	drv->playback.channels_max = slots * lanes_playback_cnt;
+	drv->capture.channels_max = slots * lanes_capture_cnt;
 
 	return 0;
 }
