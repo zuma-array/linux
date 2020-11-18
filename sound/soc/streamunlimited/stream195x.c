@@ -112,7 +112,7 @@ static int snd_soc_stream195x_hw_params(struct snd_pcm_substream *substream, str
 	 * call, however sooner or later we will support DSD where the tdm slot setup
 	 * will change at runtime, so let's just add it here.
 	 */
-	ret = snd_soc_dai_set_tdm_slot(codec_dai, 0, 0, dai_link_data->slots, dai_link_data->slot_width);
+	ret = snd_soc_dai_set_tdm_slot(codec_dai, BIT(params_channels(params)) - 1, BIT(params_channels(params)) - 1, dai_link_data->slots, dai_link_data->slot_width);
 	if (ret && ret != -ENOTSUPP)
 		return ret;
 
