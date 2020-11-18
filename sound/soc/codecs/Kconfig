@@ -47,6 +47,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_AK4671 if I2C
 	select SND_SOC_AK5386
 	select SND_SOC_AK5558 if I2C
+	select SND_SOC_AK5704 if I2C
 	select SND_SOC_ALC5623 if I2C
 	select SND_SOC_ALC5632 if I2C
 	select SND_SOC_BT_SCO
@@ -424,6 +425,11 @@ config SND_SOC_AK5386
 
 config SND_SOC_AK5558
 	tristate "AKM AK5558 CODEC"
+	depends on I2C
+	select REGMAP_I2C
+
+config SND_SOC_AK5704
+	tristate "AKM AK5704 CODEC"
 	depends on I2C
 	select REGMAP_I2C
 
