@@ -262,31 +262,16 @@
 		soc_thermal {
 			polling-delay = <1000>;
 			polling-delay-passive = <100>;
-			sustainable-power = <1050>;
 
 			thermal-sensors = <&aml_sensor0 3>;
 
 			trips {
-				/*
-				 * For one reason or another, we need an additional trip-point
-				 * which is not the one used in the cooling map below, even if
-				 * they are the same values. Otherwise the `hot` trip point will
-				 * be active (with the associated cooling-device), even if our
-				 * temperature is well below that. Also changing the switch_on
-				 * trip point to a temperature of 0 degrees does not work as
-				 * expected.
-				 */
-				switch_on: trip-point@0 {
-					temperature = <100000>;
+				passive: trip-point@0 {
+					temperature = <90000>;
 					hysteresis = <3000>;
 					type = "passive";
 				};
-				hot: trip-point@1 {
-					temperature = <100000>;
-					hysteresis = <3000>;
-					type = "passive";
-				};
-				critical: trip-point@2 {
+				critical: trip-point@1 {
 					temperature = <110000>;
 					hysteresis = <1000>;
 					type = "critical";
@@ -295,7 +280,7 @@
 
 			cooling-maps {
 				cpufreq_cooling_map {
-					trip = <&hot>;
+					trip = <&passive>;
 					cooling-device = <&cpufreq_cool0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 				};
 
