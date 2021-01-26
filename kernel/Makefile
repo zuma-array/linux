@@ -121,7 +121,7 @@ obj-$(CONFIG_GCC_PLUGIN_STACKLEAK) += stackleak.o
 KASAN_SANITIZE_stackleak.o := n
 KCOV_INSTRUMENT_stackleak.o := n
 
-$(obj)/configs.o: $(obj)/config_data.gz
+$(obj)/configs.o: $(obj)/config_data.h
 
 targets += config_data.gz
 $(obj)/config_data.gz: $(KCONFIG_CONFIG) FORCE
@@ -135,3 +135,12 @@ $(obj)/kheaders_data.tar.xz: FORCE
 	$(call cmd,genikh)
 
 clean-files := kheaders_data.tar.xz kheaders.md5
+
+filechk_ikconfiggz = \
+	echo "static const char kernel_config_data[] __used = MAGIC_START"; \
+	cat $< | scripts/bin2c; \
+	echo "MAGIC_END;"
+
+targets += config_data.h
+$(obj)/config_data.h: $(obj)/config_data.gz FORCE
+	$(call filechk,ikconfiggz)
