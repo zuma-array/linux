@@ -7,6 +7,7 @@
 #define __FSL_SAI_H
 
 #include <linux/pm_qos.h>
+#include <linux/platform_data/dma-imx.h>
 #include <sound/dmaengine_pcm.h>
 
 #define FSL_SAI_FORMATS (SNDRV_PCM_FMTBIT_S16_LE |\
@@ -283,6 +284,7 @@ struct fsl_sai {
 	struct snd_dmaengine_dai_dma_data dma_params_tx;
 	const struct fsl_sai_soc_data *soc;
 	struct pm_qos_request pm_qos_req;
+	struct sdma_audio_config audio_config[2];
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pins_state;
 
