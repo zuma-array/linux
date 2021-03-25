@@ -792,11 +792,12 @@ static int adcx140_set_dai_tdm_slot(struct snd_soc_dai *codec_dai,
 {
 	struct snd_soc_component *component = codec_dai->component;
 	struct adcx140_priv *adcx140 = snd_soc_component_get_drvdata(component);
-	unsigned int lsb;
+	unsigned int lsb, msb;
 
 	/* TDM based on DSP mode requires slots to be adjacent */
 	lsb = __ffs(tx_mask);
-	if ((lsb + 1) != __fls(tx_mask)) {
+	msb = __fls(tx_mask);
+	if (tx_mask != GENMASK(msb, lsb)) {
 		dev_err(component->dev, "Invalid mask, slots must be adjacent\n");
 		return -EINVAL;
 	}
