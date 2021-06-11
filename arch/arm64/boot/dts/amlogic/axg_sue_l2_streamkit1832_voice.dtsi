@@ -25,6 +25,19 @@
 	sue {
 		daughterboard = "voice";
 	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		pinctrl-names = "default";
+		pinctrl-0 = <&gpio_gpioa_10>;
+
+		mic-mute {
+			label = "Mic-mute";
+			gpios = <&gpio GPIOA_10 GPIO_ACTIVE_HIGH>;
+			linux,input-type = <EV_SW>;
+			linux,code = <SW_MICROPHONE_INSERT>;
+		};
+	};
 };
 
 /*
@@ -126,5 +139,15 @@
 		 * controller and potentially USB VBUS if R140 is populated,
 		 */
 		function = "pdm";
+	};
+};
+
+&pinctrl_periphs {
+	gpio_gpioa_10: gpio_gpioa_10 {
+		mux {
+			groups = "GPIOA_10";
+			function = "gpio_periphs";
+			bias-disable;
+		};
 	};
 };
