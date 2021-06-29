@@ -96,6 +96,7 @@
 		interrupts = <GIC_SPI 81 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&clkc CLKID_SPICC0>;
 		clock-names = "core";
+		enable-dummy-mode;
 		#address-cells = <1>;
 		#size-cells = <0>;
 	};
