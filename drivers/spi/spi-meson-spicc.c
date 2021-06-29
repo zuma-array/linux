@@ -44,6 +44,8 @@
  * de-selected during the transfer so it should not break anything
  * (without warranty). The real transfer is than kicked off inside the
  * interrupt, after clearing the receive buffer.
+ * This behavior needs to be excplicitly requested via enable-dummy-mode flag
+ * in the device tree.
  */
 
 #define SPICC_MAX_FREQ	30000000
@@ -150,6 +152,7 @@ struct meson_spicc_device {
 	bool				is_burst_end;
 	bool				is_last_burst;
 	bool				dummy_mode;
+	bool				dummy_mode_enabled;
 };
 
 static inline bool meson_spicc_txfull(struct meson_spicc_device *spicc)
@@ -451,7 +454,8 @@ static int meson_spicc_transfer_one(struct spi_master *master,
 	/* Setup transfer parameters */
 	if (meson_spicc_setup_xfer(spicc, xfer) &&
 			/* Check if we are using GPIO chip select */
-			gpio_is_valid(spicc->message->spi->cs_gpio)) {
+			gpio_is_valid(spicc->message->spi->cs_gpio) &&
+			spicc->dummy_mode_enabled) {
 		/*
 		 * HACK: This is part of the dummy hack, it starts a dummy
 		 * transfer when the configuration has changed and we are using
@@ -609,6 +613,11 @@ static int meson_spicc_probe(struct platform_device *pdev)
 		ret = PTR_ERR(spicc->base);
 		goto out_master;
 	}
+
+	spicc->dummy_mode_enabled = of_property_read_bool(pdev->dev.of_node,
+							  "enable-dummy-mode");
+	dev_info(&pdev->dev, "SPI dummy-byte-on-switching enabled: %d\n",
+	    spicc->dummy_mode_enabled);
 
 	/* Disable all IRQs */
 	writel_relaxed(0, spicc->base + SPICC_INTREG);

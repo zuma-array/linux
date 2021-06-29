@@ -39,6 +39,9 @@ Required properties:
 
 Optional properties:
  - resets: phandle of the internal reset line
+ - enable-dummy-mode: enables a dummy zero byte workaround (only available with
+   GPIO chip-select) needed for cases, where the first byte is corrupted by
+   switching configs, e.g. between devices running at different speeds
 
 See ../spi/spi-bus.txt for more details on SPI bus master and slave devices
 required and optional properties.
