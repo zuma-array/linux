@@ -1767,7 +1767,7 @@ int __hci_req_schedule_adv_instance(struct hci_request *req, u8 instance,
 				adv_instance->remaining_time - timeout;
 
 	/* Only use work for scheduling instances with legacy advertising */
-	if (!ext_adv_capable(hdev)) {
+	if (!ext_adv_capable(hdev) && timeout > 0) {
 		hdev->adv_instance_timeout = timeout;
 		queue_delayed_work(hdev->req_workqueue,
 			   &hdev->adv_instance_expire,
