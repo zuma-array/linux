@@ -295,7 +295,7 @@
 	ldr	r7, =0x10210100
 	str	r7, [r5, #0x4]
 
-	ldr	r7, =0x00040046
+	ldr	r7, =0x00200046
 	str	r7, [r4, #DDRC_RFSHTMG]
 
 	/* dram root set to from dram main, div by 2 */
