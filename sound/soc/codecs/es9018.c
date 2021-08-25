@@ -122,6 +122,19 @@ static bool is_dsd(snd_pcm_format_t fmt)
 	}
 }
 
+static int es9018_get_mute(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	struct es9018_private *priv = snd_soc_codec_get_drvdata(
+			snd_soc_kcontrol_codec(kcontrol));
+	int left = priv->manual_mute & ES9018_SOFT_MUTE_CH_L;
+	int right = priv->manual_mute & ES9018_SOFT_MUTE_CH_R;
+
+	ucontrol->value.integer.value[0] = !left;
+	ucontrol->value.integer.value[1] = !right;
+
+	return 0;
+}
+
 static int es9018_put_mute(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
 	struct es9018_private *priv = snd_soc_codec_get_drvdata(
@@ -162,7 +175,7 @@ static const struct snd_kcontrol_new es9018_controls[] = {
 	SOC_DOUBLE_R_TLV("Master Playback Volume", ES9018_VOL1_LEFT,
 			ES9018_VOL2_RIGHT, 0, 240 , 1, vol_DAC_tlv),
 	SOC_DOUBLE_EXT("Master Playback Switch", ES9018_GENERAL, 0, 1, 1, 1,
-			snd_soc_get_volsw, es9018_put_mute),
+			es9018_get_mute, es9018_put_mute),
 	SOC_ENUM("PCM Rolloff filter", es9018_pcm_rolloff_filter),
 	SOC_ENUM("DSD Rolloff filter", es9018_dsd_rolloff_filter),
 	SOC_ENUM("Audio Polarity", es9018_analog_polarity),
