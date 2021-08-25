@@ -93,16 +93,21 @@ struct es9018_private {
 	/* GPIO driving Reset pin, if any */
 	int		gpio_reset;
 	int		manual_mute;
+	int		digital_mute;
 };
+
+static int es9018_update_soft_mute(struct snd_soc_codec *codec, struct es9018_private *priv)
+{
+	int mute = priv->manual_mute | priv->digital_mute;
+	return snd_soc_update_bits(codec, ES9018_GENERAL,
+				   ES9018_SOFT_MUTE_MASK, mute);
+}
 
 static int es9018_digital_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct es9018_private *priv = snd_soc_codec_get_drvdata(dai->codec);
-
-	/* On unmute, use switch control value instead */
-	return snd_soc_update_bits(dai->codec, ES9018_GENERAL,
-				   ES9018_SOFT_MUTE_MASK,
-				   mute ? ES9018_SOFT_MUTE_MASK : priv->manual_mute);
+	priv->digital_mute = mute ? ES9018_SOFT_MUTE_MASK : 0;
+	return es9018_update_soft_mute(dai->codec, priv);
 }
 
 #define HBW_BCLK_RATE	(2822400UL)
@@ -137,15 +142,16 @@ static int es9018_get_mute(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_va
 
 static int es9018_put_mute(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
-	struct es9018_private *priv = snd_soc_codec_get_drvdata(
-			snd_soc_kcontrol_codec(kcontrol));
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct es9018_private *priv = snd_soc_codec_get_drvdata(codec);
+
 	int left = !ucontrol->value.integer.value[0];
 	int right = !ucontrol->value.integer.value[1];
 
 	priv->manual_mute = (left ? ES9018_SOFT_MUTE_CH_L : 0) |
 		(right ? ES9018_SOFT_MUTE_CH_R : 0);
 
-	return snd_soc_put_volsw(kcontrol, ucontrol);
+	return es9018_update_soft_mute(codec, priv);
 }
 
 static const char * const es9018_pcm_rolloff_filter_txt[] = {
