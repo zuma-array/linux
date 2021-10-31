@@ -38,6 +38,7 @@ static const char * const axp20x_model_names[] = {
 	"AXP288",
 	"AXP806",
 	"AXP809",
+	"AXP313A",
 };
 
 static const struct regmap_range axp152_writeable_ranges[] = {
@@ -147,6 +148,24 @@ static const struct regmap_access_table axp806_writeable_table = {
 static const struct regmap_access_table axp806_volatile_table = {
 	.yes_ranges	= axp806_volatile_ranges,
 	.n_yes_ranges	= ARRAY_SIZE(axp806_volatile_ranges),
+};
+
+static const struct regmap_range axp313a_writeable_ranges[] = {
+	regmap_reg_range(AXP313A_ON_INDICATE, AXP313A_IRQ_STATUS1),
+};
+
+static const struct regmap_range axp313a_volatile_ranges[] = {
+	regmap_reg_range(AXP313A_ON_INDICATE, AXP313A_IRQ_STATUS1),
+};
+
+static const struct regmap_access_table axp313a_writeable_table = {
+	.yes_ranges	= axp313a_writeable_ranges,
+	.n_yes_ranges	= ARRAY_SIZE(axp313a_writeable_ranges),
+};
+
+static const struct regmap_access_table axp313a_volatile_table = {
+	.yes_ranges	= axp313a_volatile_ranges,
+	.n_yes_ranges	= ARRAY_SIZE(axp313a_volatile_ranges),
 };
 
 static struct resource axp152_pek_resources[] = {
@@ -304,6 +323,16 @@ static const struct regmap_config axp806_regmap_config = {
 	.wr_table	= &axp806_writeable_table,
 	.volatile_table	= &axp806_volatile_table,
 	.max_register	= AXP806_VREF_TEMP_WARN_L,
+	.cache_type	= REGCACHE_RBTREE,
+};
+
+static const struct regmap_config axp313a_regmap_config = {
+	.reg_bits	= 8,
+	.val_bits	= 8,
+	.wr_table	= &axp313a_writeable_table,
+	.volatile_table	= &axp313a_volatile_table,
+	.max_register	= AXP313A_IRQ_STATUS1,
+	.use_single_rw	= true,
 	.cache_type	= REGCACHE_RBTREE,
 };
 
@@ -488,6 +517,16 @@ static const struct regmap_irq axp809_regmap_irqs[] = {
 	INIT_REGMAP_IRQ(AXP809, GPIO0_INPUT,		4, 0),
 };
 
+static const struct regmap_irq axp313a_regmap_irqs[] = {
+	INIT_REGMAP_IRQ(AXP313A, KEY_L2H_EN,		0, 7),
+	INIT_REGMAP_IRQ(AXP313A, KEY_H2L_EN,		0, 6),
+	INIT_REGMAP_IRQ(AXP313A, POKSIRQ_EN,		0, 5),
+	INIT_REGMAP_IRQ(AXP313A, POKLIRQ_EN,		0, 4),
+	INIT_REGMAP_IRQ(AXP313A, DCDC3_UNDER,		0, 3),
+	INIT_REGMAP_IRQ(AXP313A, DCDC2_UNDER,		0, 2),
+	INIT_REGMAP_IRQ(AXP313A, TEMP_OVER,		0, 0),
+};
+
 static const struct regmap_irq_chip axp152_regmap_irq_chip = {
 	.name			= "axp152_irq_chip",
 	.status_base		= AXP152_IRQ1_STATE,
@@ -562,6 +601,18 @@ static const struct regmap_irq_chip axp809_regmap_irq_chip = {
 	.num_regs		= 5,
 };
 
+static const struct regmap_irq_chip axp313a_regmap_irq_chip = {
+	.name			= "axp313a_irq_chip",
+	.status_base		= AXP313A_IRQ_STATUS1,
+	.ack_base		= AXP313A_IRQ_STATUS1,
+	.mask_base		= AXP313A_IRQ_ENABLE1,
+	.mask_invert		= true,
+	.init_ack_masked	= true,
+	.irqs			= axp313a_regmap_irqs,
+	.num_irqs		= ARRAY_SIZE(axp313a_regmap_irqs),
+	.num_regs		= 1,
+};
+
 static struct mfd_cell axp20x_cells[] = {
 	{
 		.name		= "axp20x-gpio",
@@ -618,6 +669,11 @@ static struct resource axp288_adc_resources[] = {
 		.end   = AXP288_IRQ_GPADC,
 		.flags = IORESOURCE_IRQ,
 	},
+};
+
+static struct resource axp313a_pek_resources[] = {
+	DEFINE_RES_IRQ_NAMED(AXP313A_IRQ_KEY_L2H_EN, "PEK_DBR"),
+	DEFINE_RES_IRQ_NAMED(AXP313A_IRQ_KEY_H2L_EN, "PEK_DBF"),
 };
 
 static struct resource axp288_extcon_resources[] = {
@@ -740,6 +796,60 @@ static struct mfd_cell axp809_cells[] = {
 	},
 };
 
+#define AXP313A_DCDC1 "dcdc1"
+#define AXP313A_DCDC2 "dcdc2"
+#define AXP313A_DCDC3 "dcdc3"
+#define AXP313A_ALDO1 "aldo1"
+#define AXP313A_DLDO1 "dldo1"
+
+static struct mfd_cell axp313a_cells[] = {
+	{
+		.name = "axp2101-pek",
+		.num_resources = ARRAY_SIZE(axp313a_pek_resources),
+		.resources = axp313a_pek_resources,
+		.of_compatible = "x-powers,axp2101-pek",
+	},
+	{
+		.name = "axp20x-regulator",
+	},
+	{
+		.of_compatible = "xpower-vregulator,dcdc1",
+		.name = "reg-virt-consumer",
+		.id = 1,
+		.platform_data = AXP313A_DCDC1,
+		.pdata_size = sizeof(AXP313A_DCDC1),
+
+	},
+	{
+		.of_compatible = "xpower-vregulator,dcdc2",
+		.name = "reg-virt-consumer",
+		.id = 2,
+		.platform_data = AXP313A_DCDC2,
+		.pdata_size = sizeof(AXP313A_DCDC2),
+	},
+	{
+		.of_compatible = "xpower-vregulator,dcdc3",
+		.name = "reg-virt-consumer",
+		.id = 3,
+		.platform_data = AXP313A_DCDC3,
+		.pdata_size = sizeof(AXP313A_DCDC3),
+	},
+	{
+		.of_compatible = "xpower-vregulator,aldo1",
+		.name = "reg-virt-consumer",
+		.id = 4,
+		.platform_data = AXP313A_ALDO1,
+		.pdata_size = sizeof(AXP313A_ALDO1),
+	},
+	{
+		.of_compatible = "xpower-vregulator,dldo1",
+		.name = "reg-virt-consumer",
+		.id = 5,
+		.platform_data = AXP313A_DLDO1,
+		.pdata_size = sizeof(AXP313A_DLDO1),
+	},
+};
+
 int axp20x_match_device(struct axp20x_dev *axp20x)
 {
 	struct device *dev = axp20x->dev;
@@ -801,6 +911,12 @@ int axp20x_match_device(struct axp20x_dev *axp20x)
 		axp20x->regmap_cfg = &axp22x_regmap_config;
 		axp20x->regmap_irq_chip = &axp809_regmap_irq_chip;
 		break;
+	case AXP313A_ID:
+		axp20x->nr_cells = ARRAY_SIZE(axp313a_cells);
+		axp20x->cells = axp313a_cells;
+		axp20x->regmap_cfg = &axp313a_regmap_config;
+		axp20x->regmap_irq_chip = &axp313a_regmap_irq_chip;
+		break;
 	default:
 		dev_err(dev, "unsupported AXP20X ID %lu\n", axp20x->variant);
 		return -EINVAL;
@@ -811,6 +927,95 @@ int axp20x_match_device(struct axp20x_dev *axp20x)
 	return 0;
 }
 EXPORT_SYMBOL(axp20x_match_device);
+
+#ifdef DEBUG_AXP313A_PMIC
+int axp_debug_mask;
+static struct axp20x_dev *axp20x_pm_power_off;
+
+static ssize_t debugmask_store(struct class *class,
+				struct class_attribute *attr,
+				const char *buf, size_t count)
+{
+	int val, err;
+
+	err = kstrtoint(buf, 16, &val);
+	if (err)
+		return err;
+
+	axp_debug_mask = val;
+
+	return count;
+}
+
+static ssize_t debugmask_show(struct class *class,
+				struct class_attribute *attr, char *buf)
+{
+	char *s = buf;
+	char *end = (char *)((ptrdiff_t)buf + (ptrdiff_t)PAGE_SIZE);
+
+	s += scnprintf(s, end - s, "%s\n", "1: SPLY 2: REGU 4: INT 8: CHG");
+	s += scnprintf(s, end - s, "debug_mask=%d\n", axp_debug_mask);
+
+	return s - buf;
+}
+
+static u32 axp_reg_addr;
+
+static ssize_t axp_reg_show(struct class *class,
+				struct class_attribute *attr, char *buf)
+{
+	u32 val;
+
+	regmap_read(axp20x_pm_power_off->regmap, axp_reg_addr, &val);
+	return sprintf(buf, "REG[0x%x]=0x%x\n",
+				axp_reg_addr, val);
+}
+
+static ssize_t axp_reg_store(struct class *class,
+				struct class_attribute *attr,
+				const char *buf, size_t count)
+{
+	s32 tmp;
+	u32 val;
+	int err;
+
+	err = kstrtoint(buf, 16, &tmp);
+	if (err)
+		return err;
+
+	if (tmp < 256) {
+		axp_reg_addr = tmp;
+	} else {
+		val = tmp & 0x00FF;
+		axp_reg_addr = (tmp >> 8) & 0x00FF;
+		regmap_write(axp20x_pm_power_off->regmap, axp_reg_addr, val);
+	}
+
+	return count;
+}
+
+static struct class_attribute axp_class_attrs[] = {
+	__ATTR(axp_reg,       S_IRUGO|S_IWUSR, axp_reg_show,   axp_reg_store),
+	__ATTR(debug_mask,    S_IRUGO|S_IWUSR, debugmask_show, debugmask_store),
+	__ATTR_NULL
+};
+
+struct class axp_class = {
+	.name = "axp",
+	.class_attrs = axp_class_attrs,
+};
+
+static int axp_sysfs_init(void)
+{
+	int status;
+
+	status = class_register(&axp_class);
+	if (status < 0)
+		pr_err("%s,%d err, status:%d\n", __func__, __LINE__, status);
+
+	return status;
+}
+#endif
 
 int axp20x_device_probe(struct axp20x_dev *axp20x)
 {
@@ -839,6 +1044,10 @@ int axp20x_device_probe(struct axp20x_dev *axp20x)
 
 		return ret;
 	}
+
+#ifdef DEBUG_AXP313A_PMIC
+	axp_sysfs_init();
+#endif
 
 	dev_info(axp20x->dev, "AXP20X driver loaded\n");
 
