@@ -1,9 +1,13 @@
 dtb-y += axg_sue_s1832_l1_prime.dtb
 dtb-y += axg_sue_s1832_l2_prime.dtb
+dtb-y += axg_sue_s1832_l4_prime.dtb
 dtb-y += axg_sue_s1832_l1_factory.dtb
 dtb-y += axg_sue_s1832_l2_factory.dtb
+dtb-y += axg_sue_s1832_l4_factory.dtb
 dtb-y += axg_sue_s1832_l2_streamkit1832_dabfm.dtb
+dtb-y += axg_sue_s1832_l4_streamkit1832_dabfm.dtb
 dtb-y += axg_sue_s1832_l2_streamkit1832_voice.dtb
+dtb-y += axg_sue_s1832_l4_streamkit1832_voice.dtb
 
 targets += dtbs
 
