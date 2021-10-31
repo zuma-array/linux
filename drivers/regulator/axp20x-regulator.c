@@ -471,6 +471,35 @@ static const struct regulator_desc axp809_regulators[] = {
 	AXP_DESC_SW(AXP809, SW, "sw", "swin", AXP22X_PWR_OUT_CTRL2, BIT(6)),
 };
 
+static const struct regulator_linear_range axp313a_dcdc1_ranges[] = {
+	REGULATOR_LINEAR_RANGE(500000, 0x0, 0x46, 10000),
+	REGULATOR_LINEAR_RANGE(1220000, 0x47, 0x57, 20000),
+	REGULATOR_LINEAR_RANGE(1600000, 0x58, 0x6A, 100000),
+};
+
+static const struct regulator_linear_range axp313a_dcdc2_ranges[] = {
+	REGULATOR_LINEAR_RANGE(500000, 0x0, 0x46, 10000),
+	REGULATOR_LINEAR_RANGE(1220000, 0x47, 0x57, 20000),
+};
+
+static const struct regulator_linear_range axp313a_dcdc3_ranges[] = {
+	REGULATOR_LINEAR_RANGE(500000, 0x0, 0x46, 10000),
+	REGULATOR_LINEAR_RANGE(1220000, 0x47, 0x66, 20000),
+};
+
+static const struct regulator_desc axp313a_regulators[] = {
+	AXP_DESC_RANGES(AXP313A, DCDC1, "dcdc1", "vin1", axp313a_dcdc1_ranges,
+			0x6B, AXP313A_DCDC1_CONRTOL, 0x7f, AXP313A_OUTPUT_CONTROL, BIT(0)),
+	AXP_DESC_RANGES(AXP313A, DCDC2, "dcdc2", "vin2", axp313a_dcdc2_ranges,
+			0x58, AXP313A_DCDC2_CONRTOL, 0x7f, AXP313A_OUTPUT_CONTROL, BIT(1)),
+	AXP_DESC_RANGES(AXP313A, DCDC3, "dcdc3", "vin3", axp313a_dcdc3_ranges,
+			0x58, AXP313A_DCDC3_CONRTOL, 0x7f, AXP313A_OUTPUT_CONTROL, BIT(2)),
+	AXP_DESC(AXP313A, LDO1, "ldo1", "ldo1in", 500, 3500, 100,
+		AXP313A_ALDO1_CONRTOL, 0x1f, AXP313A_OUTPUT_CONTROL, BIT(3)),
+	AXP_DESC(AXP313A, LDO2, "ldo2", "ldo2in", 500, 3500, 100,
+		AXP313A_DLDO1_CONRTOL, 0x1f, AXP313A_OUTPUT_CONTROL, BIT(4)),
+};
+
 static int axp20x_set_dcdc_freq(struct platform_device *pdev, u32 dcdcfreq)
 {
 	struct axp20x_dev *axp20x = dev_get_drvdata(pdev->dev.parent);
@@ -509,6 +538,11 @@ static int axp20x_set_dcdc_freq(struct platform_device *pdev, u32 dcdcfreq)
 		def = 3000;
 		step = 150;
 		break;
+	case AXP313A_ID:
+		/*
+		 * We never intend to change the DCDC freq of AXP313A, just add this option
+		 * here to make it easier to read.
+		 */
 	default:
 		dev_err(&pdev->dev,
 			"Setting DCDC frequency for unsupported AXP variant\n");
@@ -616,6 +650,15 @@ static int axp20x_set_dcdc_workmode(struct regulator_dev *rdev, int id, u32 work
 		workmode <<= id - AXP803_DCDC1;
 		break;
 
+	case AXP313A_ID:
+		reg = AXP313A_DCDC_DVM_PWM;
+		if (id < AXP313A_DCDC1 || id > AXP313A_DCDC3)
+			return -EINVAL;
+
+		mask = AXP22X_WORKMODE_DCDCX_MASK(id);
+		workmode <<= id;
+		break;
+
 	default:
 		/* should not happen */
 		WARN_ON(1);
@@ -709,7 +752,10 @@ static void axp20x_power_off(void)
 			regulator_disable_regmap(pdata->regs[i]);
 	}
 
-	regmap_write(axp20x->regmap, AXP20X_OFF_CTRL, AXP20X_OFF);
+	if (axp20x->variant == AXP152_ID)
+		regmap_write(axp20x->regmap, AXP20X_OFF_CTRL, AXP20X_OFF);
+	else if (axp20x->variant == AXP313A_ID)
+		regmap_write(axp20x->regmap, AXP313A_POWER_STATUS, AXP20X_OFF);
 
 	/* Give capacitors etc. time to drain to avoid kernel panic msg. */
 	msleep(500);
@@ -760,6 +806,10 @@ static int axp20x_regulator_probe(struct platform_device *pdev)
 	case AXP809_ID:
 		regulators = axp809_regulators;
 		nregulators = AXP809_REG_ID_MAX;
+		break;
+	case AXP313A_ID:
+		regulators = axp313a_regulators;
+		nregulators = AXP313A_REG_ID_MAX;
 		break;
 	default:
 		dev_err(&pdev->dev, "Unsupported AXP variant: %ld\n",
