@@ -1,0 +1,30 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+#include <dt-bindings/input/input.h>
+
+/ {
+	model = "StreamUnlimited stream810 factory board (imx7d)";
+	compatible = "sue,stream810-factory", "sue,stream810", "fsl,imx7d";
+
+	/*
+	 * All currently produced modules support 1.2 GHz operation, so in the
+	 * factory tester we always enable the 1.2 GHz operating point. The
+	 * other main reason is that when we want to do the margin test, the module
+	 * only crashes at 1.2 GHz.
+	 */
+	operating-points = <
+		1200000	1260000
+		996000	1080000
+		792000	980000
+	>;
+};
+
+&pinctrl_factory_test_gpios {
+			fsl,pins = <
+			MX7D_PAD_LCD_DATA16__GPIO3_IO21			0x30
+			>;
+};

@@ -408,7 +408,13 @@ dtb-$(CONFIG_SOC_IMX7D) += \
 	imx7d-sue-s810-prime-voice-0-0.dtb \
 	imx7d-sue-s810-prime-highend-0-0.dtb \
 	imx7d-sue-s810-prime-unknown-0-0.dtb \
-	imx7d-sue-s810-unknown-0-0.dtb
+	imx7d-sue-s810-unknown-0-0.dtb \
+	imx7d-sue-s810x3-factory-0-0.dtb \
+	imx7d-sue-s810x3-prime-highend-0-0.dtb \
+	imx7d-sue-s810x3-prime-unknown-0-0.dtb \
+	imx7d-sue-s810x3-prime-voice-0-0.dtb \
+	imx7d-sue-s810x3-unknown-0-0.dtb \
+
 dtb-$(CONFIG_SOC_LS1021A) += \
 	ls1021a-qds.dtb \
 	ls1021a-twr.dtb

@@ -1,0 +1,60 @@
+/ {
+	sue {
+		moduleversion = "1";
+	};
+};
+
+&i2c4 {
+	/delete-node/axp152@32;
+
+	pmic: axp313a@36 {
+		compatible = "x-powers,axp313a";
+		reg = <0x36>;
+		no-irq;
+
+		/* when this pin is set the axp driver will perform a reset by toggeling the wakeup pin */
+		reset-wakeup-gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>;
+
+		/*
+		* Set AXP313A DCDC1 (VDD_SOC_IN) to PWM workmode.
+		*/
+		reset-workmode-config = <0x01>;
+
+		/* Per default all regulators are in auto mode */
+		default-workmode-config = <0x00>;
+
+		regulators {
+			vdd_arm: dcdc1{
+				regulator-name = "vdd_arm";
+				regulator-min-microvolt = <950000>;
+				regulator-max-microvolt = <1240000>;
+				regulator-boot-on;
+				regulator-always-on;
+			};
+
+			wifi_vbat: wifi_vbat {
+				regulator-name = "wifi_vbat";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-boot-on;
+			};
+		};
+	};
+};
+
+&cpu0{
+	operating-points = <
+	996000  1080000
+	792000  980000
+	>;
+
+	/*
+	* These are additional operating points which will be merged into the `normal` operating
+	* points by the U-Boot when the `enable_additional_operating_points` variable is set in the
+	* const partition.
+	*/
+	additional-operating-points = <
+	/* KHz  uV */
+	1200000 1240000
+	>;
+};
