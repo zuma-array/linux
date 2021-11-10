@@ -131,6 +131,26 @@
 		.ops		= &axp20x_ops_table,				\
 	}
 
+#define AXP_DESC_RANGES(_family, _id, _match, _supply, _ranges, _n_voltages,	\
+			_vreg, _vmask, _ereg, _emask)				\
+	[_family##_##_id] = {							\
+		.name		= #_id,					\
+		.supply_name	= (_supply),					\
+		.of_match	= of_match_ptr(_match),				\
+		.regulators_node = of_match_ptr("regulators"),			\
+		.type		= REGULATOR_VOLTAGE,				\
+		.id		= _family##_##_id,				\
+		.n_voltages	= (_n_voltages),				\
+		.owner		= THIS_MODULE,					\
+		.vsel_reg	= (_vreg),					\
+		.vsel_mask	= (_vmask),					\
+		.enable_reg	= (_ereg),					\
+		.enable_mask	= (_emask),					\
+		.linear_ranges	= (_ranges),					\
+		.n_linear_ranges = ARRAY_SIZE(_ranges),				\
+		.ops		= &axp20x_ops_range,				\
+	}
+
 static const int axp152_ldo0_data[] = { 5000000, 3300000, 2800000, 2500000 };
 
 static const int axp20x_ldo4_data[] = { 1250000, 1300000, 1400000, 1500000, 1600000,
@@ -147,6 +167,15 @@ static struct regulator_ops axp20x_ops_table = {
 	.get_voltage_sel	= regulator_get_voltage_sel_regmap,
 	.list_voltage		= regulator_list_voltage_table,
 	.map_voltage		= regulator_map_voltage_ascend,
+	.enable			= regulator_enable_regmap,
+	.disable		= regulator_disable_regmap,
+	.is_enabled		= regulator_is_enabled_regmap,
+};
+
+static struct regulator_ops axp20x_ops_range = {
+	.set_voltage_sel	= regulator_set_voltage_sel_regmap,
+	.get_voltage_sel	= regulator_get_voltage_sel_regmap,
+	.list_voltage		= regulator_list_voltage_linear_range,
 	.enable			= regulator_enable_regmap,
 	.disable		= regulator_disable_regmap,
 	.is_enabled		= regulator_is_enabled_regmap,
@@ -256,6 +285,34 @@ static const struct regulator_desc axp22x_regulators[] = {
 	AXP_DESC_FIXED(AXP22X, RTC_LDO, "rtc_ldo", "ips", 3000),
 };
 
+static const struct regulator_linear_range axp313a_dcdc1_ranges[] = {
+	REGULATOR_LINEAR_RANGE(500000, 0x0, 0x46, 10000),
+	REGULATOR_LINEAR_RANGE(1220000, 0x47, 0x57, 20000),
+	REGULATOR_LINEAR_RANGE(1600000, 0x58, 0x6A, 100000),
+};
+
+static const struct regulator_linear_range axp313a_dcdc2_ranges[] = {
+	REGULATOR_LINEAR_RANGE(500000, 0x0, 0x46, 10000),
+	REGULATOR_LINEAR_RANGE(1220000, 0x47, 0x57, 20000),
+};
+
+static const struct regulator_linear_range axp313a_dcdc3_ranges[] = {
+	REGULATOR_LINEAR_RANGE(500000, 0x0, 0x46, 10000),
+	REGULATOR_LINEAR_RANGE(1220000, 0x47, 0x66, 20000),
+};
+
+static const struct regulator_desc axp313a_regulators[] = {
+	AXP_DESC_RANGES(AXP313A, DCDC1, "dcdc1", "vin1", axp313a_dcdc1_ranges,
+		0x6B, AXP313A_DCDC1_CONRTOL, 0x7f, AXP313A_OUTPUT_CONTROL, BIT(0)),
+	AXP_DESC_RANGES(AXP313A, DCDC2, "dcdc2", "vin2", axp313a_dcdc2_ranges,
+		0x58, AXP313A_DCDC2_CONRTOL, 0x7f, AXP313A_OUTPUT_CONTROL, BIT(1)),
+	AXP_DESC_RANGES(AXP313A, DCDC3, "dcdc3", "vin3", axp313a_dcdc3_ranges,
+		0x58, AXP313A_DCDC3_CONRTOL, 0x7f, AXP313A_OUTPUT_CONTROL, BIT(2)),
+	AXP_DESC(AXP313A, LDO1, "ldo1", "ldo1in", 500, 3500, 100,
+		AXP313A_ALDO1_CONRTOL, 0x1f, AXP313A_OUTPUT_CONTROL, BIT(3)),
+	AXP_DESC(AXP313A, LDO2, "ldo2", "ldo2in", 500, 3500, 100,
+		AXP313A_DLDO1_CONRTOL, 0x1f, AXP313A_OUTPUT_CONTROL, BIT(4)),
+};
 static int axp20x_set_dcdc_freq(struct platform_device *pdev, u32 dcdcfreq)
 {
 	struct axp20x_dev *axp20x = dev_get_drvdata(pdev->dev.parent);
@@ -276,6 +333,11 @@ static int axp20x_set_dcdc_freq(struct platform_device *pdev, u32 dcdcfreq)
 		def = 3000;
 		step = 150;
 		break;
+	case AXP313A_ID:
+		/*
+		 * We never intend to change the DCDC freq of AXP313A, just add this option
+		 * here to make it easier to read.
+		 */
 	default:
 		dev_err(&pdev->dev,
 			"Setting DCDC frequency for unsupported AXP variant\n");
@@ -392,6 +454,9 @@ static int axp20x_regulator_probe(struct platform_device *pdev)
 	case AXP221_ID:
 		regulators = axp22x_regulators;
 		nregulators = AXP22X_REG_ID_MAX;
+	case AXP313A_ID:
+		regulators = axp313a_regulators;
+		nregulators = AXP313A_REG_ID_MAX;
 		break;
 	default:
 		dev_err(&pdev->dev, "Unsupported AXP variant: %ld\n",

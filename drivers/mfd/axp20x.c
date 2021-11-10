@@ -38,6 +38,7 @@ static const char * const axp20x_model_names[] = {
 	"AXP209",
 	"AXP221",
 	"AXP288",
+	"AXP313A",
 };
 
 static const struct regmap_range axp152_writeable_ranges[] = {
@@ -124,9 +125,32 @@ static const struct regmap_access_table axp288_volatile_table = {
 	.n_yes_ranges	= ARRAY_SIZE(axp288_volatile_ranges),
 };
 
+static const struct regmap_range axp313a_writeable_ranges[] = {
+	regmap_reg_range(AXP313A_ON_INDICATE, AXP313A_IRQ_STATUS1),
+};
+
+static const struct regmap_range axp313a_volatile_ranges[] = {
+	regmap_reg_range(AXP313A_ON_INDICATE, AXP313A_IRQ_STATUS1),
+};
+
+static const struct regmap_access_table axp313a_writeable_table = {
+	.yes_ranges	= axp313a_writeable_ranges,
+	.n_yes_ranges	= ARRAY_SIZE(axp313a_writeable_ranges),
+};
+
+static const struct regmap_access_table axp313a_volatile_table = {
+	.yes_ranges	= axp313a_volatile_ranges,
+	.n_yes_ranges	= ARRAY_SIZE(axp313a_volatile_ranges),
+};
+
 static struct resource axp152_pek_resources[] = {
 	DEFINE_RES_IRQ_NAMED(AXP152_IRQ_PEK_RIS_EDGE, "PEK_DBR"),
 	DEFINE_RES_IRQ_NAMED(AXP152_IRQ_PEK_FAL_EDGE, "PEK_DBF"),
+};
+
+static struct resource axp313a_pek_resources[] = {
+	DEFINE_RES_IRQ_NAMED(AXP313A_IRQ_KEY_L2H_EN, "PEK_DBR"),
+	DEFINE_RES_IRQ_NAMED(AXP313A_IRQ_KEY_H2L_EN, "PEK_DBF"),
 };
 
 static struct resource axp20x_pek_resources[] = {
@@ -230,6 +254,16 @@ static const struct regmap_config axp288_regmap_config = {
 	.wr_table	= &axp288_writeable_table,
 	.volatile_table	= &axp288_volatile_table,
 	.max_register	= AXP288_FG_TUNE5,
+	.cache_type	= REGCACHE_RBTREE,
+};
+
+static const struct regmap_config axp313a_regmap_config = {
+	.reg_bits	= 8,
+	.val_bits	= 8,
+	.wr_table	= &axp313a_writeable_table,
+	.volatile_table	= &axp313a_volatile_table,
+	.max_register	= AXP313A_IRQ_STATUS1,
+	.use_single_rw	= true,
 	.cache_type	= REGCACHE_RBTREE,
 };
 
@@ -364,11 +398,22 @@ static const struct regmap_irq axp288_regmap_irqs[] = {
 	INIT_REGMAP_IRQ(AXP288, BC_USB_CHNG,            5, 1),
 };
 
+static const struct regmap_irq axp313a_regmap_irqs[] = {
+	INIT_REGMAP_IRQ(AXP313A, KEY_L2H_EN,		0, 7),
+	INIT_REGMAP_IRQ(AXP313A, KEY_H2L_EN,		0, 6),
+	INIT_REGMAP_IRQ(AXP313A, POKSIRQ_EN,		0, 5),
+	INIT_REGMAP_IRQ(AXP313A, POKLIRQ_EN,		0, 4),
+	INIT_REGMAP_IRQ(AXP313A, DCDC3_UNDER,		0, 3),
+	INIT_REGMAP_IRQ(AXP313A, DCDC2_UNDER,		0, 2),
+	INIT_REGMAP_IRQ(AXP313A, TEMP_OVER,		0, 0),
+};
+
 static const struct of_device_id axp20x_of_match[] = {
 	{ .compatible = "x-powers,axp152", .data = (void *) AXP152_ID },
 	{ .compatible = "x-powers,axp202", .data = (void *) AXP202_ID },
 	{ .compatible = "x-powers,axp209", .data = (void *) AXP209_ID },
 	{ .compatible = "x-powers,axp221", .data = (void *) AXP221_ID },
+	{ .compatible = "x-powers,axp313a", .data = (void *)AXP313A_ID },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, axp20x_of_match);
@@ -440,6 +485,18 @@ static const struct regmap_irq_chip axp288_regmap_irq_chip = {
 
 };
 
+static const struct regmap_irq_chip axp313a_regmap_irq_chip = {
+	.name			= "axp313a_irq_chip",
+	.status_base		= AXP313A_IRQ_STATUS1,
+	.ack_base		= AXP313A_IRQ_STATUS1,
+	.mask_base		= AXP313A_IRQ_ENABLE1,
+	.mask_invert		= true,
+	.init_ack_masked	= true,
+	.irqs			= axp313a_regmap_irqs,
+	.num_irqs		= ARRAY_SIZE(axp313a_regmap_irqs),
+	.num_regs		= 1,
+};
+
 static struct mfd_cell axp20x_cells[] = {
 	{
 		.name		= "axp20x-pek",
@@ -473,6 +530,17 @@ static struct mfd_cell axp152_cells[] = {
 	},
 	{
 		.name			= "axp20x-regulator",
+	},
+};
+
+static struct mfd_cell axp313a_cells[] = {
+	{
+		.name = "axp20x-pek",
+		.num_resources = ARRAY_SIZE(axp313a_pek_resources),
+		.resources = axp313a_pek_resources,
+	},
+	{
+		.name = "axp20x-regulator",
 	},
 };
 
@@ -605,10 +673,12 @@ static void axp20x_power_off(void)
 
 		dev_info(axp20x_pm_power_off->dev, "turning off ALDO2\n");
 		regmap_update_bits(axp20x_pm_power_off->regmap, AXP20X_PWR_OUT_CTRL, (1 << 2), 0);
+		regmap_write(axp20x_pm_power_off->regmap, AXP20X_OFF_CTRL, AXP20X_OFF);
 	}
-
-	regmap_write(axp20x_pm_power_off->regmap, AXP20X_OFF_CTRL,
-		     AXP20X_OFF);
+	else if (axp20x_pm_power_off->variant == AXP313A_ID) {
+		dev_info(axp20x_pm_power_off->dev, "turning off AXP313A\n");
+		regmap_write(axp20x_pm_power_off->regmap, AXP313A_POWER_STATUS, AXP20X_OFF);
+	}
 }
 
 static int axp20x_restart_handler_call(struct notifier_block *this, unsigned long mode, void *cmd)
@@ -626,33 +696,48 @@ static int axp20x_restart_handler_call(struct notifier_block *this, unsigned lon
 		return NOTIFY_DONE;
 	}
 
-	/* Set the DCDC workmodes to the desired state before resetting */
-	if (axp20x_pm_power_off->reset_workmode_config != -1) {
-		regmap_update_bits(axp20x_pm_power_off->regmap, AXP20X_DCDC_MODE,
-					0x0F, axp20x_pm_power_off->reset_workmode_config);
+	if (axp20x_pm_power_off->variant == AXP152_ID) {
+
+		/* Set the DCDC workmodes to the desired state before resetting */
+		if (axp20x_pm_power_off->reset_workmode_config != -1) {
+			regmap_update_bits(axp20x_pm_power_off->regmap, AXP20X_DCDC_MODE,
+						0x0F, axp20x_pm_power_off->reset_workmode_config);
+		}
+
+		/* Set POWEROK low for 64 ms on wakeup */
+		regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_PEK_KEY, (1 << 2), (1 << 2));
+
+		/* 1. Configure PWREN to be a wakeup source posedge triggered (GPIO3) */
+		regmap_write(axp20x_pm_power_off->regmap, AXP152_GPIO3_CTRL, (1 << 7) | (1 << 3) | (3 << 0));
+		regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_IRQ3_EN, (1 << 3), (1 << 3));
+
+		/*
+		 * 2. Pull the corresponding i.MX GPIO low (this was the WDOG_B pin, which was reconfigured
+		 * to be a GPIO in the imx2_restart_handler() in the watchdog driver.
+		 */
+		gpiod_set_value(reset_wakeup_gpio, 0);
+
+		/* 3. Tell the AXP to enable toggeling of PWROK (CPU RESET) and enable power recovery */
+		regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_V_OFF, (1 << 7), (1 << 7));
+		regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_V_OFF, (1 << 3), (1 << 3));
+
+		mdelay(50);
+
+		/* 4. wakeup the AXP again, this will create a reset pulse on the POWEROK line, thus resetting the CPU */
+		gpiod_set_value(reset_wakeup_gpio, 1);
 	}
+	else if (axp20x_pm_power_off->variant == AXP313A_ID) {
+		/*  Tell the AXP to set REG1AH[6]=1 to reset the PMIC */
+		dev_info(axp20x_pm_power_off->dev, "write REG1AH[6]=1 to restart the DUT\n");
+		regmap_update_bits(axp20x_pm_power_off->regmap, AXP313A_POWER_STATUS, (1 << 6), (1 << 6));
 
-	/* Set POWEROK low for 64 ms on wakeup */
-	regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_PEK_KEY, (1 << 2), (1 << 2));
-
-	/* 1. Configure PWREN to be a wakeup source posedge triggered (GPIO3) */
-	regmap_write(axp20x_pm_power_off->regmap, AXP152_GPIO3_CTRL, (1 << 7) | (1 << 3) | (3 << 0));
-	regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_IRQ3_EN, (1 << 3), (1 << 3));
-
-	/*
-	 * 2. Pull the corresponding i.MX GPIO low (this was the WDOG_B pin, which was reconfigured
-	 * to be a GPIO in the imx2_restart_handler() in the watchdog driver.
-	 */
-	gpiod_set_value(reset_wakeup_gpio, 0);
-
-	/* 3. Tell the AXP to enable toggeling of PWROK (CPU RESET) and enable power recovery */
-	regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_V_OFF, (1 << 7), (1 << 7));
-	regmap_update_bits(axp20x_pm_power_off->regmap, AXP152_V_OFF, (1 << 3), (1 << 3));
-
-	mdelay(50);
-
-	/* 4. wakeup the AXP again, this will create a reset pulse on the POWEROK line, thus resetting the CPU */
-	gpiod_set_value(reset_wakeup_gpio, 1);
+		/*
+		 * Pull the corresponding i.MX GPIO low (this was the WDOG_B pin, which was reconfigured
+		 * to be a GPIO in the imx2_restart_handler() in the watchdog driver.
+		 */
+		dev_info(axp20x_pm_power_off->dev, "AXP313A is reseting\n");
+		mdelay(50);
+	}
 
 	return NOTIFY_DONE;
 }
@@ -703,6 +788,12 @@ static int axp20x_match_device(struct axp20x_dev *axp20x, struct device *dev)
 		axp20x->nr_cells = ARRAY_SIZE(axp288_cells);
 		axp20x->regmap_cfg = &axp288_regmap_config;
 		axp20x->regmap_irq_chip = &axp288_regmap_irq_chip;
+		break;
+	case AXP313A_ID:
+		axp20x->nr_cells = ARRAY_SIZE(axp313a_cells);
+		axp20x->cells = axp313a_cells;
+		axp20x->regmap_cfg = &axp313a_regmap_config;
+		axp20x->regmap_irq_chip = &axp313a_regmap_irq_chip;
 		break;
 	default:
 		dev_err(dev, "unsupported AXP20X ID %lu\n", axp20x->variant);
@@ -764,14 +855,22 @@ static int axp20x_i2c_probe(struct i2c_client *i2c,
 		}
 	}
 
-	/* Set some regs to a default value, this regs are changed on a reboot */
-	regmap_write(axp20x->regmap, AXP152_GPIO3_CTRL, 0x07);
-	regmap_write(axp20x->regmap, AXP152_IRQ3_EN, 0x00);
-	regmap_write(axp20x->regmap, AXP152_V_OFF, 0x07);
+	if (axp20x->variant == AXP152_ID) {
+		/* Set some regs to a default value, this regs are changed on a reboot */
+		regmap_write(axp20x->regmap, AXP152_GPIO3_CTRL, 0x07);
+		regmap_write(axp20x->regmap, AXP152_IRQ3_EN, 0x00);
+		regmap_write(axp20x->regmap, AXP152_V_OFF, 0x07);
 
-	/* Restore the DCDC workmodes to the desired state */
-	if (axp20x->default_workmode_config != -1) {
-		regmap_update_bits(axp20x->regmap, AXP20X_DCDC_MODE, 0x0F, axp20x->default_workmode_config);
+		/* Restore the DCDC workmodes to the desired state */
+		if (axp20x->default_workmode_config != -1) {
+			regmap_update_bits(axp20x->regmap, AXP20X_DCDC_MODE, 0x0F, axp20x->default_workmode_config);
+		}
+	}
+	else if (axp20x->variant == AXP313A_ID) {
+		/* Restore the DCDC workmodes to the desired state */
+		if (axp20x->default_workmode_config != -1) {
+			regmap_update_bits(axp20x->regmap, AXP313A_DCDC_DVM_PWM, 0x07, axp20x->default_workmode_config);
+		}
 	}
 
 	ret = mfd_add_devices(axp20x->dev, -1, axp20x->cells,
