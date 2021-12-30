@@ -5525,6 +5525,9 @@ static void process_adv_report(struct hci_dev *hdev, u8 type, bdaddr_t *bdaddr,
 			return;
 	}
 
+	/* Store current advertisement report type */
+	hdev->connect_le_addr_type = bdaddr_type;
+
 	/* Check if we need to convert to identity address */
 	irk = hci_get_irk(hdev, bdaddr, bdaddr_type);
 	if (irk) {
