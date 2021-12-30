@@ -785,6 +785,11 @@ static void hci_req_add_le_create_conn(struct hci_request *req,
 
 	bacpy(&cp.peer_addr, &conn->dst);
 	cp.peer_addr_type = conn->dst_type;
+
+	/* Set our own address to public when connecting to public addresses */
+	if (conn->dst_type == ADDR_LE_DEV_PUBLIC)
+		own_addr_type = ADDR_LE_DEV_PUBLIC;
+
 	cp.own_address_type = own_addr_type;
 	cp.conn_interval_min = cpu_to_le16(conn->le_conn_min_interval);
 	cp.conn_interval_max = cpu_to_le16(conn->le_conn_max_interval);
@@ -880,6 +885,8 @@ struct hci_conn *hci_connect_le(struct hci_dev *hdev, bdaddr_t *dst,
 	 * from the connect request.
 	 */
 	irk = hci_find_irk_by_addr(hdev, dst, dst_type);
+	/* Use random address only for advertisements with random address */
+	if (hdev->connect_le_addr_type == ADDR_LE_DEV_RANDOM)
 	if (irk && bacmp(&irk->rpa, BDADDR_ANY)) {
 		dst = &irk->rpa;
 		dst_type = ADDR_LE_DEV_RANDOM;
