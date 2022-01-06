@@ -1063,15 +1063,6 @@ struct hci_conn *hci_connect_le(struct hci_dev *hdev, bdaddr_t *dst,
 
 	hci_req_init(&req, hdev);
 
-	/* Disable advertising if we're active. For master role
-	 * connections most controllers will refuse to connect if
-	 * advertising is enabled, and for slave role connections we
-	 * anyway have to disable it in order to start directed
-	 * advertising.
-	 */
-	if (hci_dev_test_flag(hdev, HCI_LE_ADV))
-		 __hci_req_disable_advertising(&req);
-
 	/* If requested to connect as slave use directed advertising */
 	if (conn->role == HCI_ROLE_SLAVE) {
 		/* If we're active scanning most controllers are unable
