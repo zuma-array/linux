@@ -2489,7 +2489,10 @@ static void hci_disconn_complete_evt(struct hci_dev *hdev, struct sk_buff *skb)
 	 * or until a connection is created or until the Advertising
 	 * is timed out due to Directed Advertising."
 	 */
-	if (type == LE_LINK)
+	/* Check if advertisements are enabled because we don't
+	 * disable them when LE device connects
+	 */
+	if (!hci_dev_test_flag(hdev, HCI_LE_ADV) && type == LE_LINK)
 		mgmt_reenable_advertising(hdev);
 
 unlock:
@@ -4452,7 +4455,9 @@ static void hci_le_conn_complete_evt(struct hci_dev *hdev, struct sk_buff *skb)
 	/* All controllers implicitly stop advertising in the event of a
 	 * connection, so ensure that the state bit is cleared.
 	 */
-	hci_dev_clear_flag(hdev, HCI_LE_ADV);
+	/* Controllers stop advertising only for slave connections */
+	if (ev->role == HCI_ROLE_SLAVE)
+		hci_dev_clear_flag(hdev, HCI_LE_ADV);
 
 	conn = hci_conn_hash_lookup_state(hdev, LE_LINK, BT_CONNECT);
 	if (!conn) {
