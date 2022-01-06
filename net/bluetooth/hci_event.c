@@ -4682,12 +4682,6 @@ static struct hci_conn *check_pending_le_conn(struct hci_dev *hdev,
 	if (hci_bdaddr_list_lookup(&hdev->blacklist, addr, addr_type))
 		return NULL;
 
-	/* Most controller will fail if we try to create new connections
-	 * while we have an existing one in slave role.
-	 */
-	if (hdev->conn_hash.le_num_slave > 0)
-		return NULL;
-
 	/* If we're not connectable only connect devices that we have in
 	 * our pend_le_conns list.
 	 */
