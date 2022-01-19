@@ -513,7 +513,7 @@ static void i2c_imx_clr_al_bit(unsigned int status, struct imx_i2c_struct *i2c_i
 	imx_i2c_write_reg(status, i2c_imx, IMX_I2C_I2SR);
 }
 
-static int i2c_imx_bus_busy(struct imx_i2c_struct *i2c_imx, int for_busy)
+static int i2c_imx_bus_busy(struct imx_i2c_struct *i2c_imx, int for_busy, bool atomic)
 {
 	unsigned long orig_jiffies = jiffies;
 	unsigned int temp;
@@ -542,15 +542,41 @@ static int i2c_imx_bus_busy(struct imx_i2c_struct *i2c_imx, int for_busy)
 				"<%s> I2C bus is busy\n", __func__);
 			return -ETIMEDOUT;
 		}
-		schedule();
+
+		if (!atomic)
+			schedule();
 	}
 
 	return 0;
 }
 
-static int i2c_imx_trx_complete(struct imx_i2c_struct *i2c_imx)
+/* Clear interrupt flag bit */
+static void i2c_imx_clr_if_bit(unsigned int status, struct imx_i2c_struct *i2c_imx)
 {
-	wait_event_timeout(i2c_imx->queue, i2c_imx->i2csr & I2SR_IIF, HZ / 10);
+	status &= ~I2SR_IIF;
+	status |= (i2c_imx->hwdata->i2sr_clr_opcode & I2SR_IIF);
+	imx_i2c_write_reg(status, i2c_imx, IMX_I2C_I2SR);
+}
+
+static int i2c_imx_trx_complete(struct imx_i2c_struct *i2c_imx, bool atomic)
+{
+	if (atomic) {
+		unsigned long orig_jiffies = jiffies;
+		unsigned int status;
+
+		while (1) {
+			status = imx_i2c_read_reg(i2c_imx, IMX_I2C_I2SR);
+			if (status & I2SR_IIF) {
+				i2c_imx_clr_if_bit(status, i2c_imx);
+				i2c_imx->i2csr = status;
+				break;
+			}
+			if (time_after(jiffies, orig_jiffies + (HZ / 10)))
+				break;
+		}
+	} else {
+		wait_event_timeout(i2c_imx->queue, i2c_imx->i2csr & I2SR_IIF, HZ / 10);
+	}
 
 	if (unlikely(!(i2c_imx->i2csr & I2SR_IIF))) {
 		dev_dbg(&i2c_imx->adapter.dev, "<%s> Timeout\n", __func__);
@@ -639,7 +665,7 @@ static int i2c_imx_clk_notifier_call(struct notifier_block *nb,
 	return notifier_from_errno(ret);
 }
 
-static int i2c_imx_start(struct imx_i2c_struct *i2c_imx)
+static int i2c_imx_start(struct imx_i2c_struct *i2c_imx, bool atomic)
 {
 	unsigned int temp = 0;
 	int result;
@@ -655,24 +681,33 @@ static int i2c_imx_start(struct imx_i2c_struct *i2c_imx)
 	imx_i2c_write_reg(i2c_imx->hwdata->i2sr_clr_opcode, i2c_imx, IMX_I2C_I2SR);
 	imx_i2c_write_reg(i2c_imx->hwdata->i2cr_ien_opcode, i2c_imx, IMX_I2C_I2CR);
 
-	/* Wait controller to be stable */
-	usleep_range(50, 150);
+	if (atomic) {
+		udelay(100);
+	} else {
+		/* Wait controller to be stable */
+		usleep_range(50, 150);
+	}
 
 	/* Start I2C transaction */
 	temp = imx_i2c_read_reg(i2c_imx, IMX_I2C_I2CR);
 	temp |= I2CR_MSTA;
 	imx_i2c_write_reg(temp, i2c_imx, IMX_I2C_I2CR);
-	result = i2c_imx_bus_busy(i2c_imx, 1);
+	result = i2c_imx_bus_busy(i2c_imx, 1, atomic);
 	if (result)
 		return result;
 
-	temp |= I2CR_IIEN | I2CR_MTX | I2CR_TXAK;
+	if (atomic) {
+		temp |= I2CR_MTX | I2CR_TXAK;
+		temp &= ~I2CR_IIEN;
+	} else {
+		temp |= I2CR_IIEN | I2CR_MTX | I2CR_TXAK;
+	}
 	temp &= ~I2CR_DMAEN;
 	imx_i2c_write_reg(temp, i2c_imx, IMX_I2C_I2CR);
 	return result;
 }
 
-static void i2c_imx_stop(struct imx_i2c_struct *i2c_imx)
+static void i2c_imx_stop(struct imx_i2c_struct *i2c_imx, bool atomic)
 {
 	unsigned int temp = 0;
 
@@ -694,19 +729,11 @@ static void i2c_imx_stop(struct imx_i2c_struct *i2c_imx)
 	}
 
 	if (!i2c_imx->stopped)
-		i2c_imx_bus_busy(i2c_imx, 0);
+		i2c_imx_bus_busy(i2c_imx, 0, atomic);
 
 	/* Disable I2C controller */
 	temp = i2c_imx->hwdata->i2cr_ien_opcode ^ I2CR_IEN,
 	imx_i2c_write_reg(temp, i2c_imx, IMX_I2C_I2CR);
-}
-
-/* Clear interrupt flag bit */
-static void i2c_imx_clr_if_bit(unsigned int status, struct imx_i2c_struct *i2c_imx)
-{
-	status &= ~I2SR_IIF;
-	status |= (i2c_imx->hwdata->i2sr_clr_opcode & I2SR_IIF);
-	imx_i2c_write_reg(status, i2c_imx, IMX_I2C_I2SR);
 }
 
 static irqreturn_t i2c_imx_master_isr(struct imx_i2c_struct *i2c_imx)
@@ -777,7 +804,7 @@ static int i2c_imx_dma_write(struct imx_i2c_struct *i2c_imx,
 	/* The last data byte must be transferred by the CPU. */
 	imx_i2c_write_reg(msgs->buf[msgs->len-1],
 				i2c_imx, IMX_I2C_I2DR);
-	result = i2c_imx_trx_complete(i2c_imx);
+	result = i2c_imx_trx_complete(i2c_imx, false);
 	if (result)
 		return result;
 
@@ -836,7 +863,7 @@ static int i2c_imx_dma_read(struct imx_i2c_struct *i2c_imx,
 
 	msgs->buf[msgs->len-2] = imx_i2c_read_reg(i2c_imx, IMX_I2C_I2DR);
 	/* read n byte data */
-	result = i2c_imx_trx_complete(i2c_imx);
+	result = i2c_imx_trx_complete(i2c_imx, false);
 	if (result)
 		return result;
 
@@ -849,7 +876,7 @@ static int i2c_imx_dma_read(struct imx_i2c_struct *i2c_imx,
 		temp = imx_i2c_read_reg(i2c_imx, IMX_I2C_I2CR);
 		temp &= ~(I2CR_MSTA | I2CR_MTX);
 		imx_i2c_write_reg(temp, i2c_imx, IMX_I2C_I2CR);
-		i2c_imx_bus_busy(i2c_imx, 0);
+		i2c_imx_bus_busy(i2c_imx, 0, false);
 	} else {
 		/*
 		 * For i2c master receiver repeat restart operation like:
@@ -867,7 +894,8 @@ static int i2c_imx_dma_read(struct imx_i2c_struct *i2c_imx,
 	return 0;
 }
 
-static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
+static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs,
+		bool atomic)
 {
 	int i, result;
 
@@ -876,7 +904,7 @@ static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 
 	/* write slave address */
 	imx_i2c_write_reg(i2c_8bit_addr_from_msg(msgs), i2c_imx, IMX_I2C_I2DR);
-	result = i2c_imx_trx_complete(i2c_imx);
+	result = i2c_imx_trx_complete(i2c_imx, atomic);
 	if (result)
 		return result;
 	result = i2c_imx_acked(i2c_imx);
@@ -890,7 +918,7 @@ static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 			"<%s> write byte: B%d=0x%X\n",
 			__func__, i, msgs->buf[i]);
 		imx_i2c_write_reg(msgs->buf[i], i2c_imx, IMX_I2C_I2DR);
-		result = i2c_imx_trx_complete(i2c_imx);
+		result = i2c_imx_trx_complete(i2c_imx, atomic);
 		if (result)
 			return result;
 		result = i2c_imx_acked(i2c_imx);
@@ -900,12 +928,15 @@ static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 	return 0;
 }
 
-static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs, bool is_lastmsg)
+static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs, bool is_lastmsg, bool atomic)
 {
 	int i, result;
 	unsigned int temp;
 	int block_data = msgs->flags & I2C_M_RECV_LEN;
 	int use_dma = i2c_imx->dma && msgs->len >= DMA_THRESHOLD && !block_data;
+
+	if (atomic)
+		use_dma = false;
 
 	dev_dbg(&i2c_imx->adapter.dev,
 		"<%s> write slave address: addr=0x%x\n",
@@ -913,7 +944,7 @@ static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs, bo
 
 	/* write slave address */
 	imx_i2c_write_reg(i2c_8bit_addr_from_msg(msgs), i2c_imx, IMX_I2C_I2DR);
-	result = i2c_imx_trx_complete(i2c_imx);
+	result = i2c_imx_trx_complete(i2c_imx, atomic);
 	if (result)
 		return result;
 	result = i2c_imx_acked(i2c_imx);
@@ -946,7 +977,7 @@ static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs, bo
 	for (i = 0; i < msgs->len; i++) {
 		u8 len = 0;
 
-		result = i2c_imx_trx_complete(i2c_imx);
+		result = i2c_imx_trx_complete(i2c_imx, atomic);
 		if (result)
 			return result;
 		/*
@@ -974,7 +1005,7 @@ static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs, bo
 				temp = imx_i2c_read_reg(i2c_imx, IMX_I2C_I2CR);
 				temp &= ~(I2CR_MSTA | I2CR_MTX);
 				imx_i2c_write_reg(temp, i2c_imx, IMX_I2C_I2CR);
-				i2c_imx_bus_busy(i2c_imx, 0);
+				i2c_imx_bus_busy(i2c_imx, 0, atomic);
 			} else {
 				/*
 				 * For i2c master receiver repeat restart operation like:
@@ -1078,8 +1109,9 @@ static int i2c_imx_recovery_for_layerscape(struct imx_i2c_struct *i2c_imx)
 	return 0;
 }
 
-static int i2c_imx_xfer(struct i2c_adapter *adapter,
-						struct i2c_msg *msgs, int num)
+static int i2c_imx_xfer_common(struct i2c_adapter *adapter,
+						struct i2c_msg *msgs, int num,
+						bool atomic)
 {
 	unsigned int i, temp;
 	int result;
@@ -1109,7 +1141,7 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 	 * workround for ERR010027: ensure that the I2C BUS is idle
 	 * before switching to master mode and attempting a Start cycle
 	 */
-	result =  i2c_imx_bus_busy(i2c_imx, 0);
+	result =  i2c_imx_bus_busy(i2c_imx, 0, atomic);
 	if (result) {
 		/* timeout */
 		if ((result == -ETIMEDOUT) && (i2c_imx->layerscape_bus_recover == 1))
@@ -1119,11 +1151,11 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 	}
 
 	/* Start I2C transfer */
-	result = i2c_imx_start(i2c_imx);
+	result = i2c_imx_start(i2c_imx, atomic);
 	if (result) {
 		if (i2c_imx->adapter.bus_recovery_info) {
 			i2c_recover_bus(&i2c_imx->adapter);
-			result = i2c_imx_start(i2c_imx);
+			result = i2c_imx_start(i2c_imx, atomic);
 		}
 	}
 
@@ -1141,7 +1173,7 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 			temp = imx_i2c_read_reg(i2c_imx, IMX_I2C_I2CR);
 			temp |= I2CR_RSTA;
 			imx_i2c_write_reg(temp, i2c_imx, IMX_I2C_I2CR);
-			result = i2c_imx_bus_busy(i2c_imx, 1);
+			result = i2c_imx_bus_busy(i2c_imx, 1, atomic);
 			if (result)
 				goto fail0;
 		}
@@ -1165,13 +1197,13 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 			(temp & I2SR_SRW ? 1 : 0), (temp & I2SR_IIF ? 1 : 0),
 			(temp & I2SR_RXAK ? 1 : 0));
 #endif
-		if (msgs[i].flags & I2C_M_RD)
-			result = i2c_imx_read(i2c_imx, &msgs[i], is_lastmsg);
-		else {
-			if (i2c_imx->dma && msgs[i].len >= DMA_THRESHOLD)
+		if (msgs[i].flags & I2C_M_RD) {
+			result = i2c_imx_read(i2c_imx, &msgs[i], is_lastmsg, atomic);
+		} else {
+			if ((i2c_imx->dma && msgs[i].len >= DMA_THRESHOLD) && !atomic)
 				result = i2c_imx_dma_write(i2c_imx, &msgs[i]);
 			else
-				result = i2c_imx_write(i2c_imx, &msgs[i]);
+				result = i2c_imx_write(i2c_imx, &msgs[i], atomic);
 		}
 		if (result)
 			goto fail0;
@@ -1179,7 +1211,7 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 
 fail0:
 	/* Stop I2C transfer */
-	i2c_imx_stop(i2c_imx);
+	i2c_imx_stop(i2c_imx, atomic);
 
 	pm_runtime_mark_last_busy(i2c_imx->adapter.dev.parent);
 	pm_runtime_put_autosuspend(i2c_imx->adapter.dev.parent);
@@ -1192,6 +1224,18 @@ out:
 		(result < 0) ? "error" : "success msg",
 			(result < 0) ? result : num);
 	return (result < 0) ? result : num;
+}
+
+static int i2c_imx_xfer(struct i2c_adapter *adapter,
+						struct i2c_msg *msgs, int num)
+{
+	return i2c_imx_xfer_common(adapter, msgs, num, false);
+}
+
+static int i2c_imx_xfer_atomic(struct i2c_adapter *adapter,
+						struct i2c_msg *msgs, int num)
+{
+	return i2c_imx_xfer_common(adapter, msgs, num, true);
 }
 
 static void i2c_imx_prepare_recovery(struct i2c_adapter *adap)
@@ -1443,6 +1487,7 @@ static int i2c_imx_unreg_slave(struct i2c_client *client)
 
 static const struct i2c_algorithm i2c_imx_algo = {
 	.master_xfer	= i2c_imx_xfer,
+	.master_xfer_atomic = i2c_imx_xfer_atomic,
 	.functionality	= i2c_imx_func,
 #if IS_ENABLED(CONFIG_I2C_SLAVE)
 	.reg_slave	= i2c_imx_reg_slave,
