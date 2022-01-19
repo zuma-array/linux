@@ -66,6 +66,7 @@
 #define AXP15060_BLDO_V_CTRL_MASK	0x1F
 #define AXP15060_CLDO_V_CTRL_MASK	0x1F
 #define AXP15060_CPUSLDO_V_CTRL_MASK	0x0F
+#define AXP15060_PWR_OFF_VAL		0xa4
 
 struct axp15060_data_buffer_attr_info {
 	struct device_attribute attr;
@@ -130,6 +131,7 @@ static const struct attribute_group axp15060_attribute_group = {
 
 static const struct regmap_range axp15060_volatile_ranges[] = {
 	regmap_reg_range(AXP15060_POWERON_SRC, AXP15060_POWERON_SRC),
+	regmap_reg_range(AXP15060_PWR_DIS_PWR_DWN, AXP15060_PWR_DIS_PWR_DWN),
 	regmap_reg_range(AXP15060_IRQ_STATUS_1, AXP15060_IRQ_STATUS_2),
 };
 
@@ -257,6 +259,26 @@ static const struct regulator_desc axp15060_regulators[] = {
 	AXP15060_REG(CPUSLDO, "cpusldo", 700, 1400, 50, AXP15060_CPUSLDO_V_CTRL, AXP15060_CPUSLDO_V_CTRL_MASK, AXP15060_PWR_CTRL_3, (1 << 6)),
 };
 
+static struct device *axp15060_dev;
+
+static void axp15060_power_off(void)
+{
+	if (axp15060_dev) {
+		struct regmap *regmap = dev_get_regmap(axp15060_dev, NULL);
+
+		dev_info(axp15060_dev, "power off\n");
+		regmap_write(regmap, AXP15060_PWR_DIS_PWR_DWN, AXP15060_PWR_OFF_VAL);
+	}
+}
+
+static void axp15060_power_off_prepare(void)
+{
+	if (axp15060_dev) {
+		dev_info(axp15060_dev, "pm_power_off handler registered to axp15060\n");
+		pm_power_off = axp15060_power_off;
+	}
+}
+
 static int axp15060_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct regulator_config config = { };
@@ -268,6 +290,9 @@ static int axp15060_i2c_probe(struct i2c_client *client, const struct i2c_device
 	config.dev = &client->dev;
 	config.driver_data = NULL;
 	config.regmap = regmap;
+
+	axp15060_dev = &client->dev;
+	pm_power_off_prepare = axp15060_power_off_prepare;
 
 	for (i = 0; i < ARRAY_SIZE(axp15060_regulators); i++) {
 		struct regulator_dev *rdev;
@@ -284,6 +309,12 @@ static int axp15060_i2c_probe(struct i2c_client *client, const struct i2c_device
 
 static int axp15060_i2c_remove(struct i2c_client *client)
 {
+	if (pm_power_off_prepare == axp15060_power_off_prepare)
+		pm_power_off_prepare = NULL;
+
+	if (pm_power_off == axp15060_power_off)
+		pm_power_off = NULL;
+
 	sysfs_remove_group(&client->dev.kobj, &axp15060_attribute_group);
 	return 0;
 }
