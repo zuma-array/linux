@@ -279,6 +279,7 @@ struct ci_hdrc {
 	struct work_struct		power_lost_work;
 	struct workqueue_struct		*power_lost_wq;
 	struct mutex			mutex;
+	struct workqueue_struct		*vbus_oc_wq;
 	struct delayed_work		check_vbus_work;
 };
 
