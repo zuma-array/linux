@@ -19,6 +19,7 @@
 #include <linux/regmap.h>
 #include <linux/pm_runtime.h>
 #include <linux/busfreq-imx.h>
+#include <linux/util_macros.h>
 
 #include <sound/asoundef.h>
 #include <sound/dmaengine_pcm.h>
@@ -37,6 +38,8 @@
 				INT_LOSS_LOCK | INT_DPLL_LOCKED)
 
 #define SIE_INTR_FOR(tx)	(tx ? INTR_FOR_PLAYBACK : INTR_FOR_CAPTURE)
+
+#define SPDIFIN_SAMPLE_RATE_ENUM_NAME		"SPDIFIN Sample Rate"
 
 /* Index list for the values that has if (DPLL Locked) condition */
 static u8 srpc_dpll_locked[] = { 0x0, 0x1, 0x2, 0x3, 0x4, 0xa, 0xb };
@@ -62,6 +65,25 @@ struct fsl_spdif_soc_data {
 	u32 interrupts;
 	u64 tx_formats;
 	u64 rx_rates;
+};
+
+static const int spdifin_samplerates[] =
+	{0, 32000, 44100, 48000, 88200, 96000, 176400, 192000};
+
+static const char *const spdifin_samplerate_s[] = {
+	"N/A",
+	"32000",
+	"44100",
+	"48000",
+	"88200",
+	"96000",
+	"176400",
+	"192000"
+};
+
+static const struct soc_enum spdifin_sample_rate_enum[] = {
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(spdifin_samplerate_s),
+			spdifin_samplerate_s),
 };
 
 /*
@@ -115,6 +137,7 @@ struct fsl_spdif_priv {
 	const struct fsl_spdif_soc_data *soc;
 	struct spdif_mixer_control fsl_spdif_control;
 	struct snd_soc_dai_driver cpu_dai_drv;
+	struct snd_soc_card *card;
 	struct platform_device *pdev;
 	struct regmap *regmap;
 	bool dpll_locked;
@@ -136,6 +159,9 @@ struct fsl_spdif_priv {
 	struct clk *pll11k_clk;
 	bool bypass;
 };
+
+/* Function prototypes */
+static int spdif_get_rxclk_rate(struct fsl_spdif_priv *, enum spdif_gainsel);
 
 static struct fsl_spdif_soc_data fsl_spdif_vf610 = {
 	.imx = false,
@@ -347,8 +373,19 @@ static irqreturn_t spdif_isr(int irq, void *devid)
 	if (sis & INT_TXFIFO_RESYNC)
 		dev_dbg(&pdev->dev, "isr: Tx FIFO resync\n");
 
-	if (sis & INT_CNEW)
+	if (sis & INT_CNEW) {
 		dev_dbg(&pdev->dev, "isr: cstatus new\n");
+
+		if (spdif_priv->dpll_locked) {
+			struct snd_soc_card *scard = spdif_priv->card;
+			struct snd_kcontrol *ctrl_sample_rate = snd_soc_card_get_kcontrol(scard,
+					SPDIFIN_SAMPLE_RATE_ENUM_NAME);
+
+			snd_ctl_notify(spdif_priv->card->snd_card,
+						   SNDRV_CTL_EVENT_MASK_VALUE,
+						   &ctrl_sample_rate->id);
+		}
+	}
 
 	if (sis & INT_VAL_NOGOOD)
 		dev_dbg(&pdev->dev, "isr: validity flag no good\n");
@@ -1188,6 +1225,17 @@ static int fsl_spdif_rxrate_info(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int fsl_spdif_rx_samplerate_mixer_info(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 192000;
+
+	return 0;
+}
+
 static u32 gainsel_multi[GAINSEL_MULTI_MAX] = {
 	24, 16, 12, 8, 6, 4, 3,
 };
@@ -1240,6 +1288,26 @@ static int fsl_spdif_rxrate_get(struct snd_kcontrol *kcontrol,
 
 	ucontrol->value.integer.value[0] = rate;
 
+	return 0;
+}
+
+static int fsl_spdif_rx_samplerate_mixer_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_dai *cpu_dai = snd_kcontrol_chip(kcontrol);
+	struct fsl_spdif_priv *spdif_priv = snd_soc_dai_get_drvdata(cpu_dai);
+
+	int rate = 0;
+
+	if (spdif_priv->dpll_locked)
+		rate = spdif_get_rxclk_rate(spdif_priv, SPDIF_DEFAULT_GAINSEL);
+
+	/* spdif_get_rxclk_rate returns exact sample rate, which is most of the time
+	 * couple of Hzs off from the standard sample rate, using find_closest find
+	 * the closest standard sample rate value */
+	rate = find_closest(rate, spdifin_samplerates, ARRAY_SIZE(spdifin_samplerates));
+
+	ucontrol->value.integer.value[0] = rate;
 	return 0;
 }
 
@@ -1355,6 +1423,16 @@ static struct snd_kcontrol_new fsl_spdif_ctrls[] = {
 		.get = fsl_spdif_bypass_get,
 		.put = fsl_spdif_bypass_put,
 	},
+	/* RX sample rate mixer */
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = SPDIFIN_SAMPLE_RATE_ENUM_NAME,
+		.access = SNDRV_CTL_ELEM_ACCESS_READ |
+			SNDRV_CTL_ELEM_ACCESS_VOLATILE,
+		.info = snd_soc_info_enum_double,
+		.get = fsl_spdif_rx_samplerate_mixer_get,
+		.private_value = (unsigned long)&spdifin_sample_rate_enum
+	},
 	/* User bit sync mode set/get controller */
 	{
 		.iface = SNDRV_CTL_ELEM_IFACE_PCM,
@@ -1386,6 +1464,8 @@ static int fsl_spdif_dai_probe(struct snd_soc_dai *dai)
 				  &spdif_private->dma_params_rx);
 
 	snd_soc_add_dai_controls(dai, fsl_spdif_ctrls, ARRAY_SIZE(fsl_spdif_ctrls));
+
+	spdif_private->card = dai->component->card;
 
 	/*Clear the val bit for Tx*/
 	regmap_update_bits(spdif_private->regmap, REG_SPDIF_SCR,
