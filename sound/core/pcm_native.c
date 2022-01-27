@@ -1024,8 +1024,14 @@ static int snd_pcm_pre_start(struct snd_pcm_substream *substream, int state)
 
 static int snd_pcm_do_start(struct snd_pcm_substream *substream, int state)
 {
+	struct snd_pcm_runtime *runtime = substream->runtime;
 	if (substream->runtime->trigger_master != substream)
 		return 0;
+
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
+	    runtime->silence_size > 0)
+		snd_pcm_playback_silence(substream, ULONG_MAX);
+
 	return substream->ops->trigger(substream, SNDRV_PCM_TRIGGER_START);
 }
 
@@ -1043,9 +1049,6 @@ static void snd_pcm_post_start(struct snd_pcm_substream *substream, int state)
 	runtime->hw_ptr_buffer_jiffies = (runtime->buffer_size * HZ) / 
 							    runtime->rate;
 	runtime->status->state = state;
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
-	    runtime->silence_size > 0)
-		snd_pcm_playback_silence(substream, ULONG_MAX);
 	if (substream->timer)
 		snd_timer_notify(substream->timer, SNDRV_TIMER_EVENT_MSTART,
 				 &runtime->trigger_tstamp);
