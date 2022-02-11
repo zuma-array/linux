@@ -608,6 +608,7 @@ struct clk_hw *imx_clk_hw_cpu(const char *name, const char *parent_name,
 #define IMX_COMPOSITE_CORE		BIT(0)
 #define IMX_COMPOSITE_BUS		BIT(1)
 #define IMX_COMPOSITE_FW_MANAGED	BIT(2)
+#define IMX_COMPOSITE_SAI		BIT(3)
 
 struct clk_hw *imx8m_clk_hw_composite_flags(const char *name,
 					    const char * const *parent_names,
@@ -643,6 +644,11 @@ struct clk_hw *imx8m_clk_hw_composite_flags(const char *name,
 		ARRAY_SIZE(parent_names), reg, 0, \
 		flags | CLK_SET_RATE_NO_REPARENT | CLK_OPS_PARENT_ENABLE)
 
+#define __imx8m_clk_hw_composite_sai(name, parent_names, reg, flags) \
+	imx8m_clk_hw_composite_flags(name, parent_names, \
+		ARRAY_SIZE(parent_names), reg, IMX_COMPOSITE_SAI, \
+		flags | CLK_SET_RATE_NO_REPARENT | CLK_OPS_PARENT_ENABLE)
+
 #define __imx8m_clk_hw_fw_managed_composite(name, parent_names, reg, flags) \
 	imx8m_clk_hw_composite_flags(name, parent_names, \
 		ARRAY_SIZE(parent_names), reg, IMX_COMPOSITE_FW_MANAGED, \
@@ -659,6 +665,9 @@ struct clk_hw *imx8m_clk_hw_composite_flags(const char *name,
 
 #define imx8m_clk_hw_composite(name, parent_names, reg) \
 	__imx8m_clk_hw_composite(name, parent_names, reg, 0)
+
+#define imx8m_clk_hw_composite_sai(name, parent_names, reg) \
+	__imx8m_clk_hw_composite_sai(name, parent_names, reg, 0)
 
 #define imx8m_clk_composite(name, parent_names, reg) \
 	__imx8m_clk_composite(name, parent_names, reg, 0)
