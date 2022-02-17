@@ -833,13 +833,8 @@ static void mwifiex_set_multicast_list(struct net_device *dev)
 
 	if (dev->flags & IFF_PROMISC) {
 		mcast_list.mode = MWIFIEX_PROMISC_MODE;
-	} else if (dev->flags & IFF_ALLMULTI ||
-		   netdev_mc_count(dev) > MWIFIEX_MAX_MULTICAST_LIST_SIZE) {
-		mcast_list.mode = MWIFIEX_ALL_MULTI_MODE;
 	} else {
-		mcast_list.mode = MWIFIEX_MULTICAST_MODE;
-		mcast_list.num_multicast_addr =
-			mwifiex_copy_mcast_addr(&mcast_list, dev);
+		mcast_list.mode = MWIFIEX_ALL_MULTI_MODE;
 	}
 	mwifiex_request_set_multicast_list(priv, &mcast_list);
 }
