@@ -280,8 +280,8 @@ static const struct pll_rate_table axg_gp0_pll_rate_table[] = {
  * were done in a spreasheed called `HiFi-PLL-Calculation.ods`.
  */
 static const struct pll_rate_table axg_hifi_pll_rate_table[] = {
-	PLL_FRAC_RATE(451584045, 301, 4, 2, 0, 0x01CB),		/* For 22.5792 MHz MCLK */
-	PLL_FRAC_RATE(491520080, 328, 4, 2, 0, 0xF5C3),		/* For 24.576 MHz MCLK */
+	PLL_FRAC_RATE(451584000, 226, 3, 2, 0, 0xF958),		/* For 22.5792 MHz MCLK */
+	PLL_FRAC_RATE(491520000, 492, 6, 2, 0, 0xF0A4),		/* For 24.576 MHz MCLK */
 	{ /* sentinel */ },
 };
 
