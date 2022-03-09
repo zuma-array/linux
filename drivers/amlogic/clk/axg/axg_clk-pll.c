@@ -128,7 +128,7 @@ static unsigned long meson_axg_pll_recalc_rate(struct clk_hw *hw,
  */
 static s16 calc_frac(unsigned long rate, unsigned long parent_rate, u16 m, u16 n, u16 od, u16 od2)
 {
-	return (((((s64)rate * n) << od << od2) - ((s64)parent_rate * m)) * 8192) / (s64)parent_rate;
+	return DIV_ROUND_CLOSEST((((((s64)rate * n) << od << od2) - ((s64)parent_rate * m)) * 8192), (s64)parent_rate);
 }
 
 /*
