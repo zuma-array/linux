@@ -31,13 +31,6 @@
 				regulator-boot-on;
 				regulator-always-on;
 			};
-
-			wifi_vbat: wifi_vbat {
-				regulator-name = "wifi_vbat";
-				regulator-min-microvolt = <3300000>;
-				regulator-max-microvolt = <3300000>;
-				regulator-boot-on;
-			};
 		};
 	};
 };
@@ -57,4 +50,8 @@
 	/* KHz  uV */
 	1200000 1240000
 	>;
+};
+
+&pcie {
+	/delete-property/pcie-dev-supply;
 };
