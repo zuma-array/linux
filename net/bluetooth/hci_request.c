@@ -258,14 +258,13 @@ void hci_req_add_le_passive_scan(struct hci_request *req)
 	u8 own_addr_type;
 	u8 filter_policy;
 
-	/* Set require_privacy to false since no SCAN_REQ are send
-	 * during passive scanning. Not using an non-resolvable address
-	 * here is important so that peer devices using direct
-	 * advertising with our address will be correctly reported
-	 * by the controller.
+	/* When we request that random LE address should be used some BT
+	 * controllers will just report advertisements with random address
+	 * which is definitely wrong (random address is for SCAN_REQ).
+	 * Since this is passive scan it is safe to use public LE address
+	 * without compromising privacy.
 	 */
-	if (hci_update_random_address(req, false, &own_addr_type))
-		return;
+	 own_addr_type = ADDR_LE_DEV_PUBLIC;
 
 	/* Adding or removing entries from the white list must
 	 * happen before enabling scanning. The controller does
