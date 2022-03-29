@@ -1000,15 +1000,10 @@ void hci_req_add_le_passive_scan(struct hci_request *req)
 		return;
 	}
 
-	/* Set require_privacy to false since no SCAN_REQ are send
-	 * during passive scanning. Not using an non-resolvable address
-	 * here is important so that peer devices using direct
-	 * advertising with our address will be correctly reported
-	 * by the controller.
+	/* Use public address for passive scans because controller can return
+	 * Status: Invalid HCI Command Parameters (0x12)
 	 */
-	if (hci_update_random_address(req, false, scan_use_rpa(hdev),
-				      &own_addr_type))
-		return;
+	own_addr_type = ADDR_LE_DEV_PUBLIC;
 
 	/* Adding or removing entries from the white list must
 	 * happen before enabling scanning. The controller does
@@ -2987,14 +2982,10 @@ static int active_scan(struct hci_request *req, unsigned long opt)
 	if (hci_dev_test_flag(hdev, HCI_LE_SCAN))
 		hci_req_add_le_scan_disable(req, false);
 
-	/* All active scans will be done with either a resolvable private
-	 * address (when privacy feature has been enabled) or non-resolvable
-	 * private address.
+	/* Use public address for active scans because controller can return
+	 * Status: Invalid HCI Command Parameters (0x12)
 	 */
-	err = hci_update_random_address(req, true, scan_use_rpa(hdev),
-					&own_addr_type);
-	if (err < 0)
-		own_addr_type = ADDR_LE_DEV_PUBLIC;
+	own_addr_type = ADDR_LE_DEV_PUBLIC;
 
 	hci_req_start_scan(req, LE_SCAN_ACTIVE, interval,
 			   hdev->le_scan_window_discovery, own_addr_type,
