@@ -363,11 +363,13 @@ void __hci_req_write_fast_connectable(struct hci_request *req, bool enable)
 		/* 160 msec page scan interval */
 		acp.interval = cpu_to_le16(0x0100);
 	} else {
-		type = hdev->def_page_scan_type;
-		acp.interval = cpu_to_le16(hdev->def_page_scan_int);
+		type = PAGE_SCAN_TYPE_STANDARD;	/* default */
+
+		/* default 1.28 sec page scan */
+		acp.interval = cpu_to_le16(0x0800);
 	}
 
-	acp.window = cpu_to_le16(hdev->def_page_scan_window);
+	acp.window = cpu_to_le16(0x0012);
 
 	if (__cpu_to_le16(hdev->page_scan_interval) != acp.interval ||
 	    __cpu_to_le16(hdev->page_scan_window) != acp.window)
