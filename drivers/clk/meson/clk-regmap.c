@@ -35,7 +35,8 @@ static int clk_regmap_gate_is_enabled(struct clk_hw *hw)
 	struct clk_regmap_gate_data *gate = clk_get_regmap_gate_data(clk);
 	unsigned int val;
 
-	regmap_read(clk->map, gate->offset, &val);
+	if(clk && clk->map)
+		regmap_read(clk->map, gate->offset, &val);
 	if (gate->flags & CLK_GATE_SET_TO_DISABLE)
 		val ^= BIT(gate->bit_idx);
 
