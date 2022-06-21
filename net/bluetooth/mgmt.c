@@ -4208,19 +4208,6 @@ static bool trigger_le_scan(struct hci_request *req, u16 interval, u8 *status)
 	if (*status)
 		return false;
 
-	if (hci_dev_test_flag(hdev, HCI_LE_ADV)) {
-		/* Don't let discovery abort an outgoing connection attempt
-		 * that's using directed advertising.
-		 */
-		if (hci_conn_hash_lookup_state(hdev, LE_LINK, BT_CONNECT)) {
-			*status = MGMT_STATUS_REJECTED;
-			return false;
-		}
-
-		cancel_adv_timeout(hdev);
-		disable_advertising(req);
-	}
-
 	/* If controller is scanning, it means the background scanning is
 	 * running. Thus, we should temporarily stop it in order to set the
 	 * discovery scanning parameters.
