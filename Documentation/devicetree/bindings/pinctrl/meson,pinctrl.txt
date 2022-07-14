@@ -32,6 +32,7 @@ Required properties for sub-nodes are:
    May contain "pull", "pull-enable" and "ds" when appropriate.
  - gpio-controller: identifies the node as a gpio controller
  - #gpio-cells: must be 2
+ - sysfs-base: gpios will be numbered starting from this offset in sysfs
 
 === Other sub-nodes ===
 
