@@ -72,7 +72,7 @@
 
 #define AML_UART_PORT_NUM		12
 #define AML_UART_PORT_OFFSET		6
-#define AML_UART_DEV_NAME		"ttyAML"
+#define AML_UART_DEV_NAME		"ttyS"
 
 #define AML_UART_POLL_USEC		5
 #define AML_UART_TIMEOUT_USEC		10000
