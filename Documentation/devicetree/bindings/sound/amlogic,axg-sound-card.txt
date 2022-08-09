@@ -10,6 +10,7 @@ Optional properties:
 - audio-aux-devs : List of phandles pointing to auxiliary devices
 - audio-widgets : Please refer to widgets.txt.
 - audio-routing : A list of the connections between audio components.
+- mute-gpios : a GPIO spec for the MUTE pin.
 
 Subnodes:
 
@@ -79,6 +80,8 @@ sound {
 			"Speaker2 Right", "SPK2 OUT_B",
 			"Linein AINL", "Linein",
 			"Linein AINR", "Linein";
+
+	mute-gpios = <&gpio_ao GPIOAO_13 GPIO_ACTIVE_LOW>;
 
 	dai-link@0 {
 		sound-dai = <&frddr_a>;
