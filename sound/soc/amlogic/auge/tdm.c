@@ -494,7 +494,7 @@ static int pcm_setting_init(struct pcm_setting *setting, unsigned int rate,
 			setting->sysclk = aml_get_mclk_rate(rate);
 		}
 
-		setting->sysclk_bclk_ratio = setting->sysclk / setting->bclk;
+		setting->sysclk_bclk_ratio = aml_get_mclk_rate(rate) / setting->bclk;
 	}
 
 	return 0;
