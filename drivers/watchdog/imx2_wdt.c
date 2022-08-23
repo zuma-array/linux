@@ -80,6 +80,7 @@ struct imx2_wdt_device {
 	struct pinctrl_state *pins_default;
 
 	bool noreset;
+	bool atomicreset;
 	struct pinctrl_state *pins_reset;
 };
 
@@ -135,11 +136,18 @@ static int imx2_restart_handler(struct notifier_block *this, unsigned long mode,
 		}
 	}
 
-	/* If this flag is set than some later handler (e.g. axp20x) will perform the reset */
-	if (wdev->noreset) {
+	/*
+	 * If noreset is set and we are in normal context then some later handler like the PMIC
+	 * will perform the reset. If we are in atomic context (e.g. on kernel panic) and the
+	 * atomicreset flag is set then the later handler will not be able to reset the PMIC properly
+	 * so we continue on with the watchdog reset.
+	 */
+	if (wdev->noreset && !(in_atomic() && wdev->atomicreset)) {
 		printk(KERN_INFO "reset will not be done using the watchdog\n");
 		return NOTIFY_DONE;
 	}
+
+	printk(KERN_INFO "Performing reset using the watchdog\n");
 
 	/* Assert WDOG_B signal */
 	if (wdev->wdog_b)
@@ -382,6 +390,10 @@ static int __init imx2_wdt_probe(struct platform_device *pdev)
 
 	if (of_get_property(of_node, "sue,noreset", NULL)) {
 		wdev->noreset = true;
+	}
+
+	if (of_get_property(of_node, "sue,atomicreset", NULL)) {
+		wdev->atomicreset = true;
 	}
 
 	wdev->pins_reset = pinctrl_lookup_state(wdev->pinctrl, "reset");
