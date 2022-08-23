@@ -35,6 +35,23 @@
 	};
 };
 
+&wdog1 {
+	/*
+	 * With the new PMIC we don't want to toggle the external GPIO, instead the
+	 * driver just tells the PMIC to power-cycle, so remove the other pinmux setup.
+	 */
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_wdog1>;
+	/delete-property/pinctrl-1;
+
+	/*
+	 * However, when the kernel panics we cannot do I2C communication anymore and the
+	 * GPIO based reset from previous module version does not work with the new PMIC
+	 * so we have to use the watchdog to do the reset in atomic context.
+	 */
+	sue,atomicreset;
+};
+
 &cpu0{
 	operating-points = <
 	996000  1080000
