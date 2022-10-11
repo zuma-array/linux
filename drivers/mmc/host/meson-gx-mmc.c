@@ -1179,10 +1179,30 @@ static void sdio_rescan(struct mmc_host *mmc)
 void sdio_reinit(void)
 {
 	if (sdio_host) {
+		u32 val;
+		struct meson_host *host = mmc_priv(sdio_host);
+
 		if (sdio_host->card)
 			sdio_reset_comm(sdio_host->card);
 		else
 			sdio_rescan(sdio_host);
+
+		/*
+		 * Setting CFG_AUTO_CLK here is probably not the right place.
+		 * The clk initializes to be always on, and sdio_reinit() 
+		 * is called when the wifi is detected, since
+		 * this function is called from the out of tree wifi driver. 
+		 * However putting it in any other place did not work and broke the clk.
+		 * Places I have tried with no luck:
+		 * 	meson_mmc_clk_set()
+		 * 	meson_mmc_clk_init()
+		 * 	meson_mmc_set_ios()
+		 * 	meson_mmc_cfg_init()
+		 * So keep it here for now, because at least this works.
+		*/
+		val = readl(host->regs + SD_EMMC_CFG);
+		val |= CFG_AUTO_CLK;
+		writel(val, host->regs + SD_EMMC_CFG);
 	} else {
 		pr_info("Error: sdio_host is NULL\n");
 	}
