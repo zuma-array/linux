@@ -2157,7 +2157,7 @@ qed_iov_vp_update_mcast_bin_param(struct qed_hwfn *p_hwfn,
 
 	p_data->update_approx_mcast_flg = 1;
 	memcpy(p_data->bins, p_mcast_tlv->bins,
-	       sizeof(unsigned long) * ETH_MULTICAST_MAC_BINS_IN_REGS);
+	       sizeof(u32) * ETH_MULTICAST_MAC_BINS_IN_REGS);
 	*tlvs_mask |= 1 << QED_IOV_VP_UPDATE_MCAST;
 }
 
@@ -2899,11 +2899,11 @@ int qed_iov_mark_vf_flr(struct qed_hwfn *p_hwfn, u32 *p_disabled_vfs)
 	return found;
 }
 
-static void qed_iov_get_link(struct qed_hwfn *p_hwfn,
-			     u16 vfid,
-			     struct qed_mcp_link_params *p_params,
-			     struct qed_mcp_link_state *p_link,
-			     struct qed_mcp_link_capabilities *p_caps)
+static int qed_iov_get_link(struct qed_hwfn *p_hwfn,
+			    u16 vfid,
+			    struct qed_mcp_link_params *p_params,
+			    struct qed_mcp_link_state *p_link,
+			    struct qed_mcp_link_capabilities *p_caps)
 {
 	struct qed_vf_info *p_vf = qed_iov_get_vf_info(p_hwfn,
 						       vfid,
@@ -2911,7 +2911,7 @@ static void qed_iov_get_link(struct qed_hwfn *p_hwfn,
 	struct qed_bulletin_content *p_bulletin;
 
 	if (!p_vf)
-		return;
+		return -EINVAL;
 
 	p_bulletin = p_vf->bulletin.p_virt;
 
@@ -2921,6 +2921,7 @@ static void qed_iov_get_link(struct qed_hwfn *p_hwfn,
 		__qed_vf_get_link_state(p_hwfn, p_link, p_bulletin);
 	if (p_caps)
 		__qed_vf_get_link_caps(p_hwfn, p_caps, p_bulletin);
+	return 0;
 }
 
 static void qed_iov_process_mbx_req(struct qed_hwfn *p_hwfn,
@@ -3538,6 +3539,7 @@ static int qed_get_vf_config(struct qed_dev *cdev,
 	struct qed_public_vf_info *vf_info;
 	struct qed_mcp_link_state link;
 	u32 tx_rate;
+	int ret;
 
 	/* Sanitize request */
 	if (IS_VF(cdev))
@@ -3551,7 +3553,9 @@ static int qed_get_vf_config(struct qed_dev *cdev,
 
 	vf_info = qed_iov_get_public_vf_info(hwfn, vf_id, true);
 
-	qed_iov_get_link(hwfn, vf_id, NULL, &link, NULL);
+	ret = qed_iov_get_link(hwfn, vf_id, NULL, &link, NULL);
+	if (ret)
+		return ret;
 
 	/* Fill information about VF */
 	ivi->vf = vf_id;
@@ -3573,6 +3577,7 @@ static int qed_get_vf_config(struct qed_dev *cdev,
 
 void qed_inform_vf_link_state(struct qed_hwfn *hwfn)
 {
+	struct qed_hwfn *lead_hwfn = QED_LEADING_HWFN(hwfn->cdev);
 	struct qed_mcp_link_capabilities caps;
 	struct qed_mcp_link_params params;
 	struct qed_mcp_link_state link;
@@ -3589,9 +3594,15 @@ void qed_inform_vf_link_state(struct qed_hwfn *hwfn)
 		if (!vf_info)
 			continue;
 
-		memcpy(&params, qed_mcp_get_link_params(hwfn), sizeof(params));
-		memcpy(&link, qed_mcp_get_link_state(hwfn), sizeof(link));
-		memcpy(&caps, qed_mcp_get_link_capabilities(hwfn),
+		/* Only hwfn0 is actually interested in the link speed.
+		 * But since only it would receive an MFW indication of link,
+		 * need to take configuration from it - otherwise things like
+		 * rate limiting for hwfn1 VF would not work.
+		 */
+		memcpy(&params, qed_mcp_get_link_params(lead_hwfn),
+		       sizeof(params));
+		memcpy(&link, qed_mcp_get_link_state(lead_hwfn), sizeof(link));
+		memcpy(&caps, qed_mcp_get_link_capabilities(lead_hwfn),
 		       sizeof(caps));
 
 		/* Modify link according to the VF's configured link state */

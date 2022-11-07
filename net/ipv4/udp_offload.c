@@ -205,6 +205,9 @@ static struct sk_buff *udp4_ufo_fragment(struct sk_buff *skb,
 		goto out;
 	}
 
+	if (!(skb_shinfo(skb)->gso_type & SKB_GSO_UDP))
+		goto out;
+
 	if (!pskb_may_pull(skb, sizeof(struct udphdr)))
 		goto out;
 
@@ -262,7 +265,7 @@ struct sk_buff **udp_gro_receive(struct sk_buff **head, struct sk_buff *skb,
 	struct sock *sk;
 
 	if (NAPI_GRO_CB(skb)->encap_mark ||
-	    (skb->ip_summed != CHECKSUM_PARTIAL &&
+	    (uh->check && skb->ip_summed != CHECKSUM_PARTIAL &&
 	     NAPI_GRO_CB(skb)->csum_cnt == 0 &&
 	     !NAPI_GRO_CB(skb)->csum_valid))
 		goto out;

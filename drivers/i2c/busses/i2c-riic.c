@@ -212,14 +212,19 @@ static irqreturn_t riic_tend_isr(int irq, void *data)
 	if (readb(riic->base + RIIC_ICSR2) & ICSR2_NACKF) {
 		/* We got a NACKIE */
 		readb(riic->base + RIIC_ICDRR);	/* dummy read */
+		riic_clear_set_bit(riic, ICSR2_NACKF, 0, RIIC_ICSR2);
 		riic->err = -ENXIO;
 	} else if (riic->bytes_left) {
 		return IRQ_NONE;
 	}
 
 	if (riic->is_last || riic->err) {
-		riic_clear_set_bit(riic, 0, ICIER_SPIE, RIIC_ICIER);
+		riic_clear_set_bit(riic, ICIER_TEIE, ICIER_SPIE, RIIC_ICIER);
 		writeb(ICCR2_SP, riic->base + RIIC_ICCR2);
+	} else {
+		/* Transfer is complete, but do not send STOP */
+		riic_clear_set_bit(riic, ICIER_TEIE, 0, RIIC_ICIER);
+		complete(&riic->msg_done);
 	}
 
 	return IRQ_HANDLED;

@@ -35,6 +35,7 @@
 #include <linux/frame.h>
 
 #include <linux/kexec.h>
+#include <linux/slab.h>
 
 #include <xen/xen.h>
 #include <xen/events.h>
@@ -75,6 +76,7 @@
 #include <asm/mwait.h>
 #include <asm/pci_x86.h>
 #include <asm/cpu.h>
+#include <asm/unwind_hints.h>
 
 #ifdef CONFIG_ACPI
 #include <linux/acpi.h>
@@ -444,6 +446,12 @@ static void __init xen_init_cpuid_mask(void)
 		~((1 << X86_FEATURE_MTRR) |  /* disable MTRR */
 		  (1 << X86_FEATURE_ACC));   /* thermal monitoring */
 
+	/*
+	 * Xen PV would need some work to support PCID: CR3 handling as well
+	 * as xen_flush_tlb_others() would need updating.
+	 */
+	cpuid_leaf1_ecx_mask &= ~(1 << (X86_FEATURE_PCID % 32));  /* disable PCID */
+
 	if (!xen_initial_domain())
 		cpuid_leaf1_edx_mask &=
 			~((1 << X86_FEATURE_ACPI));  /* disable ACPI */
@@ -463,6 +471,12 @@ static void __init xen_init_cpuid_mask(void)
 		cpuid_leaf1_ecx_mask &= ~xsave_mask; /* disable XSAVE & OSXSAVE */
 	if (xen_check_mwait())
 		cpuid_leaf1_ecx_set_mask = (1 << (X86_FEATURE_MWAIT % 32));
+}
+
+static void __init xen_init_capabilities(void)
+{
+	if (xen_pv_domain())
+		setup_force_cpu_cap(X86_FEATURE_XENPV);
 }
 
 static void xen_set_debugreg(int reg, unsigned long val)
@@ -858,8 +872,8 @@ static void xen_write_idt_entry(gate_desc *dt, int entrynum, const gate_desc *g)
 	preempt_enable();
 }
 
-static void xen_convert_trap_info(const struct desc_ptr *desc,
-				  struct trap_info *traps)
+static unsigned xen_convert_trap_info(const struct desc_ptr *desc,
+				      struct trap_info *traps, bool full)
 {
 	unsigned in, out, count;
 
@@ -869,17 +883,18 @@ static void xen_convert_trap_info(const struct desc_ptr *desc,
 	for (in = out = 0; in < count; in++) {
 		gate_desc *entry = (gate_desc*)(desc->address) + in;
 
-		if (cvt_gate_to_trap(in, entry, &traps[out]))
+		if (cvt_gate_to_trap(in, entry, &traps[out]) || full)
 			out++;
 	}
-	traps[out].address = 0;
+
+	return out;
 }
 
 void xen_copy_trap_info(struct trap_info *traps)
 {
 	const struct desc_ptr *desc = this_cpu_ptr(&idt_desc);
 
-	xen_convert_trap_info(desc, traps);
+	xen_convert_trap_info(desc, traps, true);
 }
 
 /* Load a new IDT into Xen.  In principle this can be per-CPU, so we
@@ -889,6 +904,7 @@ static void xen_load_idt(const struct desc_ptr *desc)
 {
 	static DEFINE_SPINLOCK(lock);
 	static struct trap_info traps[257];
+	unsigned out;
 
 	trace_xen_cpu_load_idt(desc);
 
@@ -896,7 +912,8 @@ static void xen_load_idt(const struct desc_ptr *desc)
 
 	memcpy(this_cpu_ptr(&idt_desc), desc, sizeof(idt_desc));
 
-	xen_convert_trap_info(desc, traps);
+	out = xen_convert_trap_info(desc, traps, false);
+	memset(&traps[out], 0, sizeof(traps[0]));
 
 	xen_mc_flush();
 	if (HYPERVISOR_set_trap_table(traps))
@@ -1446,10 +1463,12 @@ static void __ref xen_setup_gdt(int cpu)
 		 * GDT. The new GDT has  __KERNEL_CS with CS.L = 1
 		 * and we are jumping to reload it.
 		 */
-		asm volatile ("pushq %0\n"
+		asm volatile (UNWIND_HINT_SAVE
+			      "pushq %0\n"
 			      "leaq 1f(%%rip),%0\n"
 			      "pushq %0\n"
 			      "lretq\n"
+			      UNWIND_HINT_RESTORE
 			      "1:\n"
 			      : "=&r" (dummy) : "0" (__KERNEL_CS));
 
@@ -1560,6 +1579,11 @@ static int xen_cpuhp_setup(void)
 	return rc >= 0 ? 0 : rc;
 }
 
+static void __init xen_domu_set_legacy_features(void)
+{
+	x86_platform.legacy.rtc = 0;
+}
+
 /* First C function to be called on Xen boot */
 asmlinkage __visible void __init xen_start_kernel(void)
 {
@@ -1625,6 +1649,7 @@ asmlinkage __visible void __init xen_start_kernel(void)
 
 	xen_init_irq_ops();
 	xen_init_cpuid_mask();
+	xen_init_capabilities();
 
 #ifdef CONFIG_X86_LOCAL_APIC
 	/*
@@ -1724,6 +1749,8 @@ asmlinkage __visible void __init xen_start_kernel(void)
 		add_preferred_console("hvc", 0, NULL);
 		if (pci_xen)
 			x86_init.pci.arch_init = pci_xen_init;
+		x86_platform.set_legacy_features =
+				xen_domu_set_legacy_features;
 	} else {
 		const struct dom0_vga_console_info *info =
 			(void *)((char *)xen_start_info +
@@ -1969,14 +1996,6 @@ bool xen_hvm_need_lapic(void)
 }
 EXPORT_SYMBOL_GPL(xen_hvm_need_lapic);
 
-static void xen_set_cpu_features(struct cpuinfo_x86 *c)
-{
-	if (xen_pv_domain()) {
-		clear_cpu_bug(c, X86_BUG_SYSRET_SS_ATTRS);
-		set_cpu_cap(c, X86_FEATURE_XENPV);
-	}
-}
-
 static void xen_pin_vcpu(int cpu)
 {
 	static bool disable_pinning;
@@ -2023,7 +2042,6 @@ const struct hypervisor_x86 x86_hyper_xen = {
 	.init_platform		= xen_hvm_guest_init,
 #endif
 	.x2apic_available	= xen_x2apic_para_available,
-	.set_cpu_features       = xen_set_cpu_features,
 	.pin_vcpu               = xen_pin_vcpu,
 };
 EXPORT_SYMBOL(x86_hyper_xen);
