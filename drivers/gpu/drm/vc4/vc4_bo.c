@@ -80,6 +80,7 @@ static void vc4_bo_destroy(struct vc4_bo *bo)
 	struct vc4_dev *vc4 = to_vc4_dev(obj->dev);
 
 	if (bo->validated_shader) {
+		kfree(bo->validated_shader->uniform_addr_offsets);
 		kfree(bo->validated_shader->texture_samples);
 		kfree(bo->validated_shader);
 		bo->validated_shader = NULL;
@@ -197,7 +198,7 @@ struct drm_gem_object *vc4_create_object(struct drm_device *dev, size_t size)
 
 	bo = kzalloc(sizeof(*bo), GFP_KERNEL);
 	if (!bo)
-		return ERR_PTR(-ENOMEM);
+		return NULL;
 
 	mutex_lock(&vc4->bo_lock);
 	vc4->bo_stats.num_allocated++;
@@ -328,6 +329,7 @@ void vc4_free_object(struct drm_gem_object *gem_bo)
 	}
 
 	if (bo->validated_shader) {
+		kfree(bo->validated_shader->uniform_addr_offsets);
 		kfree(bo->validated_shader->texture_samples);
 		kfree(bo->validated_shader);
 		bo->validated_shader = NULL;

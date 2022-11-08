@@ -24,7 +24,8 @@
 
 DEFINE_PER_CPU(int, bpf_prog_active);
 
-int sysctl_unprivileged_bpf_disabled __read_mostly;
+int sysctl_unprivileged_bpf_disabled __read_mostly =
+	IS_BUILTIN(CONFIG_BPF_UNPRIV_DEFAULT_OFF) ? 2 : 0;
 
 static LIST_HEAD(bpf_map_types);
 
@@ -579,14 +580,18 @@ static int map_get_next_key(union bpf_attr *attr)
 		goto err_put;
 	}
 
-	err = -ENOMEM;
-	key = kmalloc(map->key_size, GFP_USER);
-	if (!key)
-		goto err_put;
+	if (ukey) {
+		err = -ENOMEM;
+		key = kmalloc(map->key_size, GFP_USER);
+		if (!key)
+			goto err_put;
 
-	err = -EFAULT;
-	if (copy_from_user(key, ukey, map->key_size) != 0)
-		goto free_key;
+		err = -EFAULT;
+		if (copy_from_user(key, ukey, map->key_size) != 0)
+			goto free_key;
+	} else {
+		key = NULL;
+	}
 
 	err = -ENOMEM;
 	next_key = kmalloc(map->key_size, GFP_USER);
@@ -636,57 +641,6 @@ void bpf_register_prog_type(struct bpf_prog_type_list *tl)
 	list_add(&tl->list_node, &bpf_prog_types);
 }
 
-/* fixup insn->imm field of bpf_call instructions:
- * if (insn->imm == BPF_FUNC_map_lookup_elem)
- *      insn->imm = bpf_map_lookup_elem - __bpf_call_base;
- * else if (insn->imm == BPF_FUNC_map_update_elem)
- *      insn->imm = bpf_map_update_elem - __bpf_call_base;
- * else ...
- *
- * this function is called after eBPF program passed verification
- */
-static void fixup_bpf_calls(struct bpf_prog *prog)
-{
-	const struct bpf_func_proto *fn;
-	int i;
-
-	for (i = 0; i < prog->len; i++) {
-		struct bpf_insn *insn = &prog->insnsi[i];
-
-		if (insn->code == (BPF_JMP | BPF_CALL)) {
-			/* we reach here when program has bpf_call instructions
-			 * and it passed bpf_check(), means that
-			 * ops->get_func_proto must have been supplied, check it
-			 */
-			BUG_ON(!prog->aux->ops->get_func_proto);
-
-			if (insn->imm == BPF_FUNC_get_route_realm)
-				prog->dst_needed = 1;
-			if (insn->imm == BPF_FUNC_get_prandom_u32)
-				bpf_user_rnd_init_once();
-			if (insn->imm == BPF_FUNC_tail_call) {
-				/* mark bpf_tail_call as different opcode
-				 * to avoid conditional branch in
-				 * interpeter for every normal call
-				 * and to prevent accidental JITing by
-				 * JIT compiler that doesn't support
-				 * bpf_tail_call yet
-				 */
-				insn->imm = 0;
-				insn->code |= BPF_X;
-				continue;
-			}
-
-			fn = prog->aux->ops->get_func_proto(insn->imm);
-			/* all functions that have prototype and verifier allowed
-			 * programs to call them, must be real in-kernel functions
-			 */
-			BUG_ON(!fn->func);
-			insn->imm = fn->func - __bpf_call_base;
-		}
-	}
-}
-
 /* drop refcnt on maps used by eBPF program and free auxilary data */
 static void free_used_maps(struct bpf_prog_aux *aux)
 {
@@ -698,19 +652,39 @@ static void free_used_maps(struct bpf_prog_aux *aux)
 	kfree(aux->used_maps);
 }
 
+int __bpf_prog_charge(struct user_struct *user, u32 pages)
+{
+	unsigned long memlock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
+	unsigned long user_bufs;
+
+	if (user) {
+		user_bufs = atomic_long_add_return(pages, &user->locked_vm);
+		if (user_bufs > memlock_limit) {
+			atomic_long_sub(pages, &user->locked_vm);
+			return -EPERM;
+		}
+	}
+
+	return 0;
+}
+
+void __bpf_prog_uncharge(struct user_struct *user, u32 pages)
+{
+	if (user)
+		atomic_long_sub(pages, &user->locked_vm);
+}
+
 static int bpf_prog_charge_memlock(struct bpf_prog *prog)
 {
 	struct user_struct *user = get_current_user();
-	unsigned long memlock_limit;
+	int ret;
 
-	memlock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
-
-	atomic_long_add(prog->pages, &user->locked_vm);
-	if (atomic_long_read(&user->locked_vm) > memlock_limit) {
-		atomic_long_sub(prog->pages, &user->locked_vm);
+	ret = __bpf_prog_charge(user, prog->pages);
+	if (ret) {
 		free_uid(user);
-		return -EPERM;
+		return ret;
 	}
+
 	prog->aux->user = user;
 	return 0;
 }
@@ -719,7 +693,7 @@ static void bpf_prog_uncharge_memlock(struct bpf_prog *prog)
 {
 	struct user_struct *user = prog->aux->user;
 
-	atomic_long_sub(prog->pages, &user->locked_vm);
+	__bpf_prog_uncharge(user, prog->pages);
 	free_uid(user);
 }
 
@@ -894,9 +868,6 @@ static int bpf_prog_load(union bpf_attr *attr)
 	if (err < 0)
 		goto free_used_maps;
 
-	/* fixup BPF_CALL->imm field */
-	fixup_bpf_calls(prog);
-
 	/* eBPF program is ready to be JITed */
 	prog = bpf_prog_select_runtime(prog, &err);
 	if (err < 0)
@@ -944,6 +915,9 @@ static int bpf_obj_get(const union bpf_attr *attr)
 
 #define BPF_PROG_ATTACH_LAST_FIELD attach_flags
 
+#define BPF_F_ATTACH_MASK \
+	(BPF_F_ALLOW_OVERRIDE | BPF_F_ALLOW_MULTI)
+
 static int bpf_prog_attach(const union bpf_attr *attr)
 {
 	struct bpf_prog *prog;
@@ -956,7 +930,7 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 	if (CHECK_ATTR(BPF_PROG_ATTACH))
 		return -EINVAL;
 
-	if (attr->attach_flags & ~BPF_F_ALLOW_OVERRIDE)
+	if (attr->attach_flags & ~BPF_F_ATTACH_MASK)
 		return -EINVAL;
 
 	switch (attr->attach_type) {
@@ -973,8 +947,8 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 			return PTR_ERR(cgrp);
 		}
 
-		ret = cgroup_bpf_update(cgrp, prog, attr->attach_type,
-					attr->attach_flags & BPF_F_ALLOW_OVERRIDE);
+		ret = cgroup_bpf_attach(cgrp, prog, attr->attach_type,
+					attr->attach_flags);
 		if (ret)
 			bpf_prog_put(prog);
 		cgroup_put(cgrp);
@@ -991,6 +965,8 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 
 static int bpf_prog_detach(const union bpf_attr *attr)
 {
+	enum bpf_prog_type ptype;
+	struct bpf_prog *prog;
 	struct cgroup *cgrp;
 	int ret;
 
@@ -1003,28 +979,35 @@ static int bpf_prog_detach(const union bpf_attr *attr)
 	switch (attr->attach_type) {
 	case BPF_CGROUP_INET_INGRESS:
 	case BPF_CGROUP_INET_EGRESS:
-		cgrp = cgroup_get_from_fd(attr->target_fd);
-		if (IS_ERR(cgrp))
-			return PTR_ERR(cgrp);
-
-		ret = cgroup_bpf_update(cgrp, NULL, attr->attach_type, false);
-		cgroup_put(cgrp);
+		ptype = BPF_PROG_TYPE_CGROUP_SKB;
 		break;
 
 	default:
 		return -EINVAL;
 	}
 
+	cgrp = cgroup_get_from_fd(attr->target_fd);
+	if (IS_ERR(cgrp))
+		return PTR_ERR(cgrp);
+
+	prog = bpf_prog_get_type(attr->attach_bpf_fd, ptype);
+	if (IS_ERR(prog))
+		prog = NULL;
+
+	ret = cgroup_bpf_detach(cgrp, prog, attr->attach_type, 0);
+	if (prog)
+		bpf_prog_put(prog);
+	cgroup_put(cgrp);
 	return ret;
 }
 #endif /* CONFIG_CGROUP_BPF */
 
 SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, size)
 {
-	union bpf_attr attr = {};
+	union bpf_attr attr;
 	int err;
 
-	if (!capable(CAP_SYS_ADMIN) && sysctl_unprivileged_bpf_disabled)
+	if (sysctl_unprivileged_bpf_disabled && !capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
 	if (!access_ok(VERIFY_READ, uattr, 1))
@@ -1057,6 +1040,7 @@ SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, siz
 	}
 
 	/* copy attributes from user space, may be less than sizeof(bpf_attr) */
+	memset(&attr, 0, sizeof(attr));
 	if (copy_from_user(&attr, uattr, size) != 0)
 		return -EFAULT;
 
