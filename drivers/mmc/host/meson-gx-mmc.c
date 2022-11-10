@@ -1025,6 +1025,22 @@ out:
 	if (ret == IRQ_HANDLED)
 		meson_mmc_request_done(host->mmc, cmd->mrq);
 
+	/*
+	* Sometimes after we ack all raised interrupts,
+	* an IRQ_SDIO can still be pending, which can get lost.
+	*
+	* To prevent this, recheck the IRQ_SDIO here and schedule
+	* it to be processed.
+	*/
+	raw_status = readl(host->regs + SD_EMMC_STATUS);
+	status = raw_status & (IRQ_EN_MASK | IRQ_SDIO);
+	if (status & IRQ_SDIO) {
+		spin_lock(&host->lock);
+		__meson_mmc_enable_sdio_irq(host->mmc, 0);
+		sdio_signal_irq(host->mmc);
+		spin_unlock(&host->lock);
+	}
+
 	return ret;
 }
 
