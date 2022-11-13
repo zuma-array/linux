@@ -8,7 +8,6 @@ config AMLOGIC_MMC
 	bool "Amlogic Multimedia Card support"
 	depends on MMC
 	depends on MMC_BLOCK
-	depends on MMC_BLOCK_BOUNCE
 	default n
 	help
 	This selects support for the Amlogic SD/MMC Host Controller
