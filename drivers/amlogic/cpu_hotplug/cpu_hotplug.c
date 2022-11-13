@@ -32,6 +32,7 @@
 #include <linux/kthread.h>
 #include <linux/sched/rt.h>
 #include <linux/notifier.h>
+#include <linux/sched/task.h>
 #include <linux/sched/topology.h>
 #include "linux/amlogic/cpu_hotplug.h"
 
