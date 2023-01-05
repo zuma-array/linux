@@ -41,6 +41,7 @@ config AMLOGIC_USBPHY
 config AMLOGIC_USB2PHY
 	bool "Amlogic USB 2.0 PHY controller Driver"
 	depends on AMLOGIC_USBPHY
+	select USB_PHY
 	help
 	  Enable this to support Amlogic USB 2.0 (High Speed) PHY controller
 	  for Amlogic SoCs.
@@ -53,6 +54,7 @@ config AMLOGIC_USB2PHY
 config AMLOGIC_USB3PHY
 	bool "Amlogic USB 3.0 PHY controller Driver"
 	depends on AMLOGIC_USBPHY
+	select USB_PHY
 	help
 	  Enable this to support Amlogic USB 3.0 (Super Speed) phy controller
 	  for Amlogic SoCs.
