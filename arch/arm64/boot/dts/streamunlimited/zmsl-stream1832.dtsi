@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2022 StreamUnlimited, Inc. All rights reserved.
+ * Copyright (C) 2023 Zuma Array Ltd. All rights reserved.
+ */
+
+
+/*
+ * Overrides for ZMSL-01
+ */
+
+/ {
+	aliases {
+		/delete-property/ spi0;
+	};
+};
+
+&spicc0 {
+	status = "disabled";
+};
+
+&i2c1 {
+	status = "disabled";
+};

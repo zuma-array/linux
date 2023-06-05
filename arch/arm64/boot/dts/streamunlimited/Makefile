@@ -17,3 +17,7 @@ dtb-$(CONFIG_ARCH_MESON) += axg_sue_s1832_l2_streamkit1832_voice.dtb
 dtb-$(CONFIG_ARCH_MESON) += axg_sue_s1832_l4_streamkit1832_voice.dtb
 dtb-$(CONFIG_ARCH_MESON) += axg_sue_s1832_l5_streamkit1832_voice.dtb
 dtb-$(CONFIG_ARCH_MESON) += axg_sue_s1832_l6_streamkit1832_voice.dtb
+dtb-$(CONFIG_ARCH_MESON) += axg_sue_s1832_l2_zuma.dtb
+dtb-$(CONFIG_ARCH_MESON) += axg_sue_s1832_l4_zuma.dtb
+dtb-$(CONFIG_ARCH_MESON) += axg_sue_s1832_l5_zuma.dtb
+dtb-$(CONFIG_ARCH_MESON) += axg_sue_s1832_l6_zuma.dtb
