@@ -12,6 +12,7 @@
 / {
 	aliases {
 		/delete-property/ spi0;
+		serial2 = &uart_AO_B;
 	};
 };
 
@@ -21,4 +22,10 @@
 
 &i2c1 {
 	status = "disabled";
+};
+
+&uart_AO_B {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_ao_b_z_pins>;
 };
