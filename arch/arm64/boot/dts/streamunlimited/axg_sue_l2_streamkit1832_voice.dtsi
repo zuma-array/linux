@@ -95,6 +95,15 @@
 		codec-0 {
 			sound-dai = <&ma12040_20>;
 		};
+
+		/*
+		* Dummy codec is used here because ma12040_20 can only
+		* do playback and not record. To be able to support capture
+		* a codec is needed here that supports it.
+		*/
+		codec-1 {
+			sound-dai = <&dummy_codec>;
+		};
 	};
 
 	dai-link-8 {
