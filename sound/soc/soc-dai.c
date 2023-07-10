@@ -426,6 +426,9 @@ int snd_soc_dai_startup(struct snd_soc_dai *dai,
 {
 	int ret = 0;
 
+	if (!snd_soc_dai_stream_valid(dai, substream->stream))
+		return 0;
+
 	if (dai->driver->ops &&
 	    dai->driver->ops->startup)
 		ret = dai->driver->ops->startup(substream, dai);
@@ -441,6 +444,9 @@ void snd_soc_dai_shutdown(struct snd_soc_dai *dai,
 			  struct snd_pcm_substream *substream,
 			  int rollback)
 {
+	if (!snd_soc_dai_stream_valid(dai, substream->stream))
+		return;
+
 	if (rollback && !soc_dai_mark_match(dai, substream, startup))
 		return;
 
@@ -602,6 +608,8 @@ int snd_soc_pcm_dai_prepare(struct snd_pcm_substream *substream)
 	int i, ret;
 
 	for_each_rtd_dais(rtd, i, dai) {
+		if (!snd_soc_dai_stream_valid(dai, substream->stream))
+			continue;
 		if (dai->driver->ops &&
 		    dai->driver->ops->prepare) {
 			ret = dai->driver->ops->prepare(substream, dai);
@@ -617,6 +625,9 @@ static int soc_dai_trigger(struct snd_soc_dai *dai,
 			   struct snd_pcm_substream *substream, int cmd)
 {
 	int ret = 0;
+
+	if (!snd_soc_dai_stream_valid(dai, substream->stream))
+		return 0;
 
 	if (dai->driver->ops &&
 	    dai->driver->ops->trigger)
