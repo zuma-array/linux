@@ -151,54 +151,6 @@ static irqreturn_t axg_spdifin_status_isr_thread(int irq, void *devid)
 	return IRQ_HANDLED;
 }
 
-static int axg_spdifin_startup(struct snd_pcm_substream *substream,
-			       struct snd_soc_dai *dai)
-{
-	struct axg_spdifin *priv = snd_soc_dai_get_drvdata(dai);
-	int ret;
-
-	ret = clk_prepare_enable(priv->refclk);
-	if (ret) {
-		dev_err(dai->dev,
-			"failed to enable spdifin reference clock\n");
-		return ret;
-	}
-
-	regmap_update_bits(priv->map, SPDIFIN_CTRL0, SPDIFIN_CTRL0_EN,
-			   SPDIFIN_CTRL0_EN);
-
-	/* Enable IRQ */
-	ret = devm_request_threaded_irq(dai->dev, priv->irq,
-				axg_spdifin_status_isr,
-				axg_spdifin_status_isr_thread,
-				0,
-				"irq_spdifin",
-				priv);
-	if (ret) {
-		dev_err(dai->dev, "failed to claim irq_spdifin %u\n",
-					priv->irq);
-		return ret;
-	}
-	regmap_update_bits(priv->map, SPDIFIN_CTRL1,
-			   SPDIFIN_CTRL1_IRQ_MASK, SPDIFIN_CTRL1_IRQ_MASK);
-
-	return 0;
-}
-
-static void axg_spdifin_shutdown(struct snd_pcm_substream *substream,
-				 struct snd_soc_dai *dai)
-{
-	struct axg_spdifin *priv = snd_soc_dai_get_drvdata(dai);
-
-	/* Disable IRQ */
-	regmap_update_bits(priv->map, SPDIFIN_CTRL1,
-			   SPDIFIN_CTRL1_IRQ_MASK, 0);
-	devm_free_irq(dai->dev, priv->irq, priv);
-
-	regmap_update_bits(priv->map, SPDIFIN_CTRL0, SPDIFIN_CTRL0_EN, 0);
-	clk_disable_unprepare(priv->refclk);
-}
-
 static void axg_spdifin_write_mode_param(struct regmap *map, int mode,
 					 unsigned int val,
 					 unsigned int num_per_reg,
@@ -326,25 +278,58 @@ static int axg_spdifin_dai_probe(struct snd_soc_dai *dai)
 	ret = axg_spdifin_sample_mode_config(dai, priv);
 	if (ret) {
 		dev_err(dai->dev, "mode configuration failed\n");
-		clk_disable_unprepare(priv->pclk);
-		return ret;
+		goto pclk_err;
 	}
 
+	ret = clk_prepare_enable(priv->refclk);
+	if (ret) {
+		dev_err(dai->dev,
+			"failed to enable spdifin reference clock\n");
+		goto pclk_err;
+	}
+
+	regmap_update_bits(priv->map, SPDIFIN_CTRL0, SPDIFIN_CTRL0_EN,
+			   SPDIFIN_CTRL0_EN);
+
+	/* Enable IRQ */
+	ret = devm_request_threaded_irq(dai->dev, priv->irq,
+				axg_spdifin_status_isr,
+				axg_spdifin_status_isr_thread,
+				0,
+				"irq_spdifin",
+				priv);
+	if (ret) {
+		dev_err(dai->dev, "failed to claim irq_spdifin %u\n",
+					priv->irq);
+		return ret;
+	}
+	regmap_update_bits(priv->map, SPDIFIN_CTRL1,
+			   SPDIFIN_CTRL1_IRQ_MASK, SPDIFIN_CTRL1_IRQ_MASK);
+
 	return 0;
+
+pclk_err:
+	clk_disable_unprepare(priv->pclk);
+	return ret;
 }
 
 static int axg_spdifin_dai_remove(struct snd_soc_dai *dai)
 {
 	struct axg_spdifin *priv = snd_soc_dai_get_drvdata(dai);
 
+	/* Disable IRQ */
+	regmap_update_bits(priv->map, SPDIFIN_CTRL1,
+			   SPDIFIN_CTRL1_IRQ_MASK, 0);
+	devm_free_irq(dai->dev, priv->irq, priv);
+
+	regmap_update_bits(priv->map, SPDIFIN_CTRL0, SPDIFIN_CTRL0_EN, 0);
+	clk_disable_unprepare(priv->refclk);
 	clk_disable_unprepare(priv->pclk);
 	return 0;
 }
 
 static const struct snd_soc_dai_ops axg_spdifin_ops = {
 	.prepare	= axg_spdifin_prepare,
-	.startup	= axg_spdifin_startup,
-	.shutdown	= axg_spdifin_shutdown,
 };
 
 static int axg_spdifin_iec958_info(struct snd_kcontrol *kcontrol,
