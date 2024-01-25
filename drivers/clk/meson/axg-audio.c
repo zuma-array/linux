@@ -226,6 +226,8 @@ static const struct clk_parent_data mst_mux_parent_data[] = {
 
 #define AUD_MST_SYS_MUX(_name, _reg)					\
 	AUD_MST_MUX(_name, _reg, 0)
+#define AUD_MST_SYS_MUX_SET_PARENT(_name, _reg)					\
+	AUD_MST_MUX_SET_PARENT(_name, _reg, 0)
 #define AUD_MST_SYS_DIV(_name, _reg)					\
 	AUD_MST_DIV(_name, _reg, 0)
 
@@ -394,7 +396,7 @@ static struct clk_regmap spdifout_clk_sel =
 static struct clk_regmap pdm_dclk_sel =
 	AUD_MST_MCLK_MUX(pdm_dclk, AUDIO_CLK_PDMIN_CTRL0);
 static struct clk_regmap spdifin_clk_sel =
-	AUD_MST_SYS_MUX(spdifin_clk, AUDIO_CLK_SPDIFIN_CTRL);
+	AUD_MST_SYS_MUX_SET_PARENT(spdifin_clk, AUDIO_CLK_SPDIFIN_CTRL);
 static struct clk_regmap pdm_sysclk_sel =
 	AUD_MST_SYS_MUX(pdm_sysclk, AUDIO_CLK_PDMIN_CTRL1);
 static struct clk_regmap spdifout_b_clk_sel =
