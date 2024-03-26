@@ -1116,8 +1116,10 @@ static int axp20x_set_dcdc_freq(struct platform_device *pdev, u32 dcdcfreq)
 	case AXP313A_ID:
 		/*
 		 * We never intend to change the DCDC freq of AXP313A, just add this option
-		 * here to make it easier to read.
+		 * here to make it easier to read. retrun 0 since DCDC freq is not supported
+		 * by AXP313A to avoid print some warning log.
 		 */
+		return 0;
 	default:
 		dev_err(&pdev->dev,
 			"Setting DCDC frequency for unsupported AXP variant\n");
