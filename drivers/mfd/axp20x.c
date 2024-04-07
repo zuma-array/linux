@@ -898,49 +898,12 @@ static const struct mfd_cell axp813_cells[] = {
 
 static struct mfd_cell axp313a_cells[] = {
 	{
-		.name = "axp2101-pek",
+		.name = "axp20x-pek",
 		.num_resources = ARRAY_SIZE(axp313a_pek_resources),
 		.resources = axp313a_pek_resources,
-		.of_compatible = "x-powers,axp2101-pek",
 	},
 	{
 		.name = "axp20x-regulator",
-	},
-	{
-		.of_compatible = "xpower-vregulator,dcdc1",
-		.name = "reg-virt-consumer",
-		.id = 1,
-		.platform_data = AXP313A_DCDC1,
-		.pdata_size = sizeof(AXP313A_DCDC1),
-
-	},
-	{
-		.of_compatible = "xpower-vregulator,dcdc2",
-		.name = "reg-virt-consumer",
-		.id = 2,
-		.platform_data = AXP313A_DCDC2,
-		.pdata_size = sizeof(AXP313A_DCDC2),
-	},
-	{
-		.of_compatible = "xpower-vregulator,dcdc3",
-		.name = "reg-virt-consumer",
-		.id = 3,
-		.platform_data = AXP313A_DCDC3,
-		.pdata_size = sizeof(AXP313A_DCDC3),
-	},
-	{
-		.of_compatible = "xpower-vregulator,aldo1",
-		.name = "reg-virt-consumer",
-		.id = 4,
-		.platform_data = AXP313A_ALDO1,
-		.pdata_size = sizeof(AXP313A_ALDO1),
-	},
-	{
-		.of_compatible = "xpower-vregulator,dldo1",
-		.name = "reg-virt-consumer",
-		.id = 5,
-		.platform_data = AXP313A_DLDO1,
-		.pdata_size = sizeof(AXP313A_DLDO1),
 	},
 };
 
