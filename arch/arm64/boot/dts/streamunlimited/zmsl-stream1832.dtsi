@@ -54,6 +54,10 @@
 	};
 };
 
+&button_sense {
+	linux,code = <KEY_SLEEP>;
+};
+
 &gpio_ao {
 	gpio-line-names = "", "", "", "NPB_IN_N",
 		"SDIO_WIFI", "", "", "PHY_RESET_N",
